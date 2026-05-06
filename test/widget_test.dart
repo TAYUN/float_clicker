@@ -1,8 +1,26 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:float_clicker/app.dart';
 
 void main() {
+  const permissionChannel = MethodChannel('float_clicker/android_permissions');
+
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionChannel, (call) async {
+          if (call.method == 'getPermissionSnapshot') {
+            return {'accessibilityGranted': false, 'overlayGranted': true};
+          }
+          return null;
+        });
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionChannel, null);
+  });
+
   testWidgets('Home navigates to single point mode and guide', (tester) async {
     await tester.pumpWidget(const FloatClickerApp());
 

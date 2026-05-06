@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../core/platform/android_permission_service.dart';
 import 'clicker_controller.dart';
 import 'clicker_guide_page.dart';
 import 'clicker_settings_page.dart';
@@ -15,6 +17,8 @@ class ClickerPage extends StatefulWidget {
 
 class _ClickerPageState extends State<ClickerPage> {
   late final ClickerController _controller;
+  final AndroidPermissionService _permissionService =
+      AndroidPermissionService();
 
   @override
   void initState() {
@@ -25,8 +29,54 @@ class _ClickerPageState extends State<ClickerPage> {
 
   @override
   void dispose() {
+    _permissionService.hideSinglePointOverlay();
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _toggleSinglePointMode() async {
+    try {
+      if (_controller.isSinglePointModeEnabled) {
+        await _permissionService.hideSinglePointOverlay();
+      } else {
+        final settings = _controller.settings;
+        await _permissionService.showSinglePointOverlay(
+          intervalMs: settings.intervalMs,
+          repeatCount: settings.repeatCount,
+          infiniteLoop: settings.infiniteLoop,
+          tapDurationMs: settings.tapDurationMs,
+        );
+      }
+      _controller.toggleSinglePointMode();
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      // 当前最常见失败原因是悬浮窗权限未开启，先用 SnackBar 明确提示用户。
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message ?? '无法开启悬浮窗')));
+    }
+  }
+
+  Future<void> _toggleRunning() async {
+    try {
+      if (_controller.isRunning) {
+        await _permissionService.stopSinglePointClicking();
+      } else {
+        await _permissionService.startSinglePointClicking();
+      }
+      _controller.toggleRunning();
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message ?? '无法执行点击')));
+    }
   }
 
   @override
@@ -76,7 +126,7 @@ class _ClickerPageState extends State<ClickerPage> {
                 ),
                 const SizedBox(height: 16),
                 FilledButton.icon(
-                  onPressed: _controller.toggleSinglePointMode,
+                  onPressed: _toggleSinglePointMode,
                   icon: Icon(
                     _controller.isSinglePointModeEnabled
                         ? Icons.close
@@ -89,7 +139,7 @@ class _ClickerPageState extends State<ClickerPage> {
                 if (_controller.isSinglePointModeEnabled) ...[
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
-                    onPressed: _controller.toggleRunning,
+                    onPressed: _toggleRunning,
                     icon: Icon(
                       _controller.isRunning ? Icons.stop : Icons.play_arrow,
                     ),

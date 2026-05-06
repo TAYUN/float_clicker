@@ -11,9 +11,11 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val channelName = "float_clicker/android_permissions"
+    private lateinit var singlePointOverlayManager: SinglePointOverlayManager
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        singlePointOverlayManager = SinglePointOverlayManager(this)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -26,15 +28,56 @@ class MainActivity : FlutterActivity() {
                     openOverlaySettings()
                     result.success(null)
                 }
+                "showSinglePointOverlay" -> {
+                    if (!canDrawOverlays()) {
+                        result.error("overlay_permission_denied", "Overlay permission is not granted.", null)
+                        return@setMethodCallHandler
+                    }
+                    singlePointOverlayManager.show(singlePointOverlaySettingsFrom(call.arguments))
+                    result.success(null)
+                }
+                "hideSinglePointOverlay" -> {
+                    singlePointOverlayManager.hide()
+                    result.success(null)
+                }
+                "startSinglePointClicking" -> {
+                    val started = singlePointOverlayManager.start()
+                    if (started) {
+                        result.success(null)
+                    } else {
+                        result.error("accessibility_service_unavailable", "Accessibility service is not running.", null)
+                    }
+                }
+                "stopSinglePointClicking" -> {
+                    singlePointOverlayManager.stop()
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
+    }
+
+    override fun onDestroy() {
+        if (::singlePointOverlayManager.isInitialized) {
+            singlePointOverlayManager.hide()
+        }
+        super.onDestroy()
     }
 
     private fun getPermissionSnapshot(): Map<String, Boolean> {
         return mapOf(
             "accessibilityGranted" to isAccessibilityServiceEnabled(),
             "overlayGranted" to canDrawOverlays(),
+        )
+    }
+
+    private fun singlePointOverlaySettingsFrom(arguments: Any?): SinglePointOverlaySettings {
+        val map = arguments as? Map<*, *> ?: return SinglePointOverlaySettings()
+        return SinglePointOverlaySettings(
+            intervalMs = (map["intervalMs"] as? Number)?.toInt() ?: 500,
+            repeatCount = (map["repeatCount"] as? Number)?.toInt() ?: 10,
+            infiniteLoop = map["infiniteLoop"] as? Boolean ?: false,
+            tapDurationMs = (map["tapDurationMs"] as? Number)?.toInt() ?: 50,
         )
     }
 
