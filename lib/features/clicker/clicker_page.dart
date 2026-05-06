@@ -19,6 +19,7 @@ class _ClickerPageState extends State<ClickerPage> {
   @override
   void initState() {
     super.initState();
+    // 控制器暂时只管理 Flutter 侧演示状态；后续会把开启/关闭动作接到 Android 悬浮窗。
     _controller = ClickerController();
   }
 
