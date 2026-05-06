@@ -65,14 +65,12 @@ class SinglePointOverlayManager(private val context: Context) {
     }
 
     fun start(): Boolean {
-        val params = targetParams ?: return false
         val target = targetView ?: return false
-        val centerX = (params.x + target.width / 2f)
-        val centerY = (params.y + target.height / 2f)
         val started = SinglePointClickScheduler.start {
+            val center = targetCenterOnScreen(target)
             SinglePointClickRequest(
-                x = centerX,
-                y = centerY,
+                x = center.first,
+                y = center.second,
                 intervalMs = intervalMs,
                 repeatCount = repeatCount,
                 infiniteLoop = infiniteLoop,
@@ -187,6 +185,16 @@ class SinglePointOverlayManager(private val context: Context) {
             params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         }
         windowManager.updateViewLayout(target, params)
+    }
+
+    private fun targetCenterOnScreen(target: View): Pair<Float, Float> {
+        val location = IntArray(2)
+        // 无障碍手势使用的是屏幕坐标；用 View 的真实屏幕位置可以避开状态栏和 overlay 坐标偏移。
+        target.getLocationOnScreen(location)
+        return Pair(
+            location[0] + target.width / 2f,
+            location[1] + target.height / 2f,
+        )
     }
 
     private fun bindDrag(view: View, params: WindowManager.LayoutParams) {

@@ -11,6 +11,13 @@ class ClickerSettings {
   final bool infiniteLoop;
   final int tapDurationMs;
 
+  static const defaults = ClickerSettings(
+    intervalMs: 500,
+    repeatCount: 10,
+    infiniteLoop: false,
+    tapDurationMs: 50,
+  );
+
   ClickerSettings copyWith({
     int? intervalMs,
     int? repeatCount,

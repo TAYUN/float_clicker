@@ -3,12 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'clicker_settings.dart';
 
 class ClickerController extends ChangeNotifier {
-  ClickerSettings _settings = const ClickerSettings(
-    intervalMs: 500,
-    repeatCount: 10,
-    infiniteLoop: false,
-    tapDurationMs: 50,
-  );
+  ClickerSettings _settings = ClickerSettings.defaults;
 
   bool _isRunning = false;
   bool _isSinglePointModeEnabled = false;
@@ -16,6 +11,11 @@ class ClickerController extends ChangeNotifier {
   ClickerSettings get settings => _settings;
   bool get isRunning => _isRunning;
   bool get isSinglePointModeEnabled => _isSinglePointModeEnabled;
+
+  void updateSettings(ClickerSettings settings) {
+    _settings = settings;
+    notifyListeners();
+  }
 
   void updateInterval(String value) {
     final nextValue = int.tryParse(value);

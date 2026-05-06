@@ -4,7 +4,9 @@ import 'package:flutter/services.dart';
 import '../../core/platform/android_permission_service.dart';
 import 'clicker_controller.dart';
 import 'clicker_guide_page.dart';
+import 'clicker_settings.dart';
 import 'clicker_settings_page.dart';
+import 'clicker_settings_store.dart';
 
 class ClickerPage extends StatefulWidget {
   const ClickerPage({super.key});
@@ -19,12 +21,13 @@ class _ClickerPageState extends State<ClickerPage> {
   late final ClickerController _controller;
   final AndroidPermissionService _permissionService =
       AndroidPermissionService();
+  final ClickerSettingsStore _settingsStore = const ClickerSettingsStore();
 
   @override
   void initState() {
     super.initState();
-    // 控制器暂时只管理 Flutter 侧演示状态；后续会把开启/关闭动作接到 Android 悬浮窗。
     _controller = ClickerController();
+    _loadSavedSettings();
   }
 
   @override
@@ -60,6 +63,15 @@ class _ClickerPageState extends State<ClickerPage> {
     }
   }
 
+  Future<void> _loadSavedSettings() async {
+    final settings = await _settingsStore.load();
+    if (!mounted) {
+      return;
+    }
+
+    _controller.updateSettings(settings);
+  }
+
   Future<void> _toggleRunning() async {
     try {
       if (_controller.isRunning) {
@@ -77,6 +89,22 @@ class _ClickerPageState extends State<ClickerPage> {
         context,
       ).showSnackBar(SnackBar(content: Text(error.message ?? '无法执行点击')));
     }
+  }
+
+  Future<void> _openSettings() async {
+    final result = await Navigator.of(context).push<ClickerSettings>(
+      MaterialPageRoute(
+        builder: (_) =>
+            ClickerSettingsPage(initialSettings: _controller.settings),
+      ),
+    );
+
+    if (result == null) {
+      return;
+    }
+
+    await _settingsStore.save(result);
+    _controller.updateSettings(result);
   }
 
   @override
@@ -107,9 +135,7 @@ class _ClickerPageState extends State<ClickerPage> {
                           '间隔 ${settings.intervalMs} ms，次数 ${settings.infiniteLoop ? '无限循环' : settings.repeatCount}',
                         ),
                         trailing: const Icon(Icons.chevron_right),
-                        onTap: () => Navigator.of(
-                          context,
-                        ).pushNamed(ClickerSettingsPage.routeName),
+                        onTap: _openSettings,
                       ),
                       const Divider(height: 1),
                       ListTile(

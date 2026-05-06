@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
 import 'features/clicker/clicker_guide_page.dart';
 import 'features/clicker/clicker_page.dart';
-import 'features/clicker/clicker_settings_page.dart';
 import 'features/home/home_page.dart';
 
 class FloatClickerApp extends StatelessWidget {
@@ -19,7 +18,6 @@ class FloatClickerApp extends StatelessWidget {
       routes: {
         HomePage.routeName: (_) => const HomePage(),
         ClickerPage.routeName: (_) => const ClickerPage(),
-        ClickerSettingsPage.routeName: (_) => const ClickerSettingsPage(),
         ClickerGuidePage.routeName: (_) => const ClickerGuidePage(),
       },
     );
