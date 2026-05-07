@@ -18,11 +18,14 @@ import kotlin.math.roundToInt
 class SinglePointOverlayManager(private val context: Context) {
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
+    // targetView 是用户拖动的点击点；toolbarView 是播放/停止/关闭工具条。
+    // params 必须保留下来，因为拖拽时要不断更新 WindowManager 里的 x/y。
     private var targetView: View? = null
     private var targetParams: WindowManager.LayoutParams? = null
     private var toolbarView: LinearLayout? = null
     private var isRunning = false
 
+    // 当前配置保存在 overlay 管理器中。真正开始点击时会打包成 SinglePointClickRequest。
     private var intervalMs = 500
     private var repeatCount = 10
     private var infiniteLoop = false
@@ -32,6 +35,7 @@ class SinglePointOverlayManager(private val context: Context) {
         updateSettings(settings)
 
         if (targetView != null || toolbarView != null) {
+            // 已经显示时不重复 addView，避免 WindowManager 报 view already has parent。
             return
         }
 
@@ -40,6 +44,7 @@ class SinglePointOverlayManager(private val context: Context) {
         val nextTargetParams = overlayParams(width = dp(38), height = dp(38), x = dp(280), y = dp(260))
         val toolbarParams = overlayParams(width = dp(52), height = WindowManager.LayoutParams.WRAP_CONTENT, x = dp(18), y = dp(180))
 
+        // 点击点整体可拖动；工具条只让第一个“移动”按钮负责拖动。
         bindDrag(target, nextTargetParams)
         bindDrag(toolbar.getChildAt(0), toolbarParams)
 
@@ -53,6 +58,7 @@ class SinglePointOverlayManager(private val context: Context) {
     }
 
     fun updateSettings(settings: SinglePointOverlaySettings) {
+        // 原生侧做最后一道安全裁剪，防止过小间隔或非法次数把调度器拖进异常状态。
         intervalMs = settings.intervalMs.coerceAtLeast(50)
         repeatCount = settings.repeatCount.coerceAtLeast(1)
         infiniteLoop = settings.infiniteLoop
@@ -70,6 +76,8 @@ class SinglePointOverlayManager(private val context: Context) {
 
     fun start(): Boolean {
         val target = targetView ?: return false
+        // provider 每次点击前都会重新读取目标点中心坐标。
+        // 这样用户在点击过程中移动目标点，下一次点击会使用最新位置。
         val started = SinglePointClickScheduler.start {
             val center = targetCenterOnScreen(target)
             SinglePointClickRequest(
@@ -83,6 +91,7 @@ class SinglePointOverlayManager(private val context: Context) {
         }
 
         isRunning = started
+        // 运行时让目标点不拦截触摸，减少它挡住被点击 App 控件的概率。
         setTargetTouchable(!started)
         refreshToolbarState()
         return started
@@ -155,11 +164,13 @@ class SinglePointOverlayManager(private val context: Context) {
 
     private fun refreshToolbarState() {
         val toolbar = toolbarView ?: return
+        // 当前第一版没有替换图标，只用透明度提示播放/停止哪个按钮可用。
         (toolbar.getChildAt(1) as? TextView)?.alpha = if (isRunning) 0.45f else 1f
         (toolbar.getChildAt(2) as? TextView)?.alpha = if (isRunning) 1f else 0.45f
     }
 
     private fun overlayParams(width: Int, height: Int, x: Int, y: Int): WindowManager.LayoutParams {
+        // Android O 之后必须使用 TYPE_APPLICATION_OVERLAY；老版本继续兼容 TYPE_PHONE。
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
@@ -183,6 +194,7 @@ class SinglePointOverlayManager(private val context: Context) {
     private fun setTargetTouchable(isTouchable: Boolean) {
         val target = targetView ?: return
         val params = targetParams ?: return
+        // FLAG_NOT_TOUCHABLE 是位标记：开启时点击点透传触摸，关闭时用户可以拖动它。
         params.flags = if (isTouchable) {
             params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
         } else {
@@ -211,6 +223,8 @@ class SinglePointOverlayManager(private val context: Context) {
         view.setOnTouchListener { touchedView, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    // rawX/rawY 是屏幕坐标；params.x/y 是 overlay 左上角坐标。
+                    // 记录两组起点后，MOVE 时用手指位移去更新悬浮窗位置。
                     startRawX = event.rawX
                     startRawY = event.rawY
                     startX = params.x
@@ -221,6 +235,7 @@ class SinglePointOverlayManager(private val context: Context) {
                 MotionEvent.ACTION_MOVE -> {
                     val dx = event.rawX - startRawX
                     val dy = event.rawY - startRawY
+                    // 小于 3dp 的抖动仍当作点击，避免想点按钮时被误判为拖拽。
                     moved = moved || abs(dx) > dp(3) || abs(dy) > dp(3)
                     params.x = startX + dx.roundToInt()
                     params.y = startY + dy.roundToInt()

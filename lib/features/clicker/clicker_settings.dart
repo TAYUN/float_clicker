@@ -11,6 +11,7 @@ class ClickerSettings {
   final bool infiniteLoop;
   final int tapDurationMs;
 
+  // 需求文档里的单点模式默认值。Flutter 页面、持久化和 Android 兜底值都应保持一致。
   static const defaults = ClickerSettings(
     intervalMs: 500,
     repeatCount: 10,

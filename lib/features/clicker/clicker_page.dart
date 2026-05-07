@@ -33,6 +33,7 @@ class _ClickerPageState extends State<ClickerPage> {
 
   @override
   void dispose() {
+    // 离开单点模式页时主动移除悬浮窗，避免用户返回首页后还残留工具条。
     _permissionService.hideSinglePointOverlay();
     _controller.dispose();
     super.dispose();
@@ -44,6 +45,8 @@ class _ClickerPageState extends State<ClickerPage> {
         await _permissionService.hideSinglePointOverlay();
       } else {
         final settings = _controller.settings;
+        // 开启模式的核心动作在 Android 侧：
+        // Flutter 只把当前配置传过去，Android 负责检查悬浮窗权限并创建目标点/工具条。
         await _permissionService.showSinglePointOverlay(
           intervalMs: settings.intervalMs,
           repeatCount: settings.repeatCount,
@@ -51,6 +54,7 @@ class _ClickerPageState extends State<ClickerPage> {
           tapDurationMs: settings.tapDurationMs,
         );
       }
+      // 只有 MethodChannel 调用成功后才更新 Flutter 状态，避免原生失败时 UI 误显示已开启。
       _controller.toggleSinglePointMode();
     } on PlatformException catch (error) {
       if (!mounted) {
@@ -81,8 +85,10 @@ class _ClickerPageState extends State<ClickerPage> {
       if (_controller.isRunning) {
         await _permissionService.stopSinglePointClicking();
       } else {
+        // 原生侧会从当前点击点位置读取屏幕坐标，并通过无障碍服务执行 dispatchGesture。
         await _permissionService.startSinglePointClicking();
       }
+      // 和开启模式一样，点击运行态也等原生调用成功后再翻转。
       _controller.toggleRunning();
     } on PlatformException catch (error) {
       if (!mounted) {
@@ -110,6 +116,8 @@ class _ClickerPageState extends State<ClickerPage> {
     await _settingsStore.save(result);
     _controller.updateSettings(result);
     if (_controller.isSinglePointModeEnabled) {
+      // 悬浮窗已经创建时，保存新配置后需要同步给 Android，
+      // 否则工具条播放按钮仍会按旧间隔/次数执行。
       await _syncSinglePointSettings(result);
     }
   }

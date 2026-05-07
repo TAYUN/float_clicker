@@ -17,6 +17,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         singlePointOverlayManager = SinglePointOverlayManager(this)
 
+        // Flutter 侧只负责页面和配置；所有需要 Android 系统能力的操作都从这个通道进入。
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getPermissionSnapshot" -> result.success(getPermissionSnapshot())
@@ -29,6 +30,7 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "showSinglePointOverlay" -> {
+                    // 悬浮窗权限必须在创建 WindowManager overlay 前确认，否则 addView 会失败。
                     if (!canDrawOverlays()) {
                         result.error("overlay_permission_denied", "Overlay permission is not granted.", null)
                         return@setMethodCallHandler
@@ -45,6 +47,7 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "startSinglePointClicking" -> {
+                    // start() 会继续检查无障碍服务实例；服务未连接时返回 false 给 Flutter 提示用户。
                     val started = singlePointOverlayManager.start()
                     if (started) {
                         result.success(null)
@@ -77,6 +80,7 @@ class MainActivity : FlutterActivity() {
 
     private fun singlePointOverlaySettingsFrom(arguments: Any?): SinglePointOverlaySettings {
         val map = arguments as? Map<*, *> ?: return SinglePointOverlaySettings()
+        // Flutter 传参不可信，原生侧仍保留默认值，避免缺字段时崩溃。
         return SinglePointOverlaySettings(
             intervalMs = (map["intervalMs"] as? Number)?.toInt() ?: 500,
             repeatCount = (map["repeatCount"] as? Number)?.toInt() ?: 10,

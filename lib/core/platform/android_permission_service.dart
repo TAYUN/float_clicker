@@ -11,6 +11,7 @@ class AndroidPermissionSnapshot {
   final bool overlayGranted;
 
   factory AndroidPermissionSnapshot.fromMap(Map<Object?, Object?> map) {
+    // MethodChannel 传回的是动态 Map，这里集中转换成 Flutter 侧稳定的状态模型。
     return AndroidPermissionSnapshot(
       accessibilityGranted: map['accessibilityGranted'] == true,
       overlayGranted: map['overlayGranted'] == true,
@@ -33,6 +34,7 @@ class AndroidPermissionService {
 
   Future<AndroidPermissionSnapshot> getSnapshot() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      // 当前能力只存在于 Android。其他平台返回“未授权”快照，让 UI 走普通不可用状态。
       return AndroidPermissionSnapshot.unsupported;
     }
 
@@ -61,6 +63,8 @@ class AndroidPermissionService {
     required bool infiniteLoop,
     required int tapDurationMs,
   }) async {
+    // 这些配置会被 Android 的 SinglePointOverlayManager 保存，
+    // 点击时再交给 SinglePointClickScheduler 生成每次点击请求。
     await _invokeAndroidOnly('showSinglePointOverlay', {
       'intervalMs': intervalMs,
       'repeatCount': repeatCount,
@@ -106,7 +110,7 @@ class AndroidPermissionService {
     try {
       await _channel.invokeMethod<void>(method, arguments);
     } on MissingPluginException {
-      // 非集成测试环境没有原生 MethodChannel 实现，直接跳过。
+      // Widget 测试和非 Android 宿主没有原生 MethodChannel 实现，直接跳过。
     }
   }
 }

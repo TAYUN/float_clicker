@@ -14,6 +14,7 @@ class ClickerSettingsStore {
     final preferences = await SharedPreferences.getInstance();
     final defaults = ClickerSettings.defaults;
 
+    // 每一项单独兜底，允许后续新增配置时老用户仍能读到完整设置对象。
     return ClickerSettings(
       intervalMs: preferences.getInt(_intervalMsKey) ?? defaults.intervalMs,
       repeatCount: preferences.getInt(_repeatCountKey) ?? defaults.repeatCount,
