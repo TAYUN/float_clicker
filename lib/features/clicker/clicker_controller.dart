@@ -14,72 +14,12 @@ class ClickerController extends ChangeNotifier {
   ClickerSettings get settings => _settings;
   OverlayUiSettings get overlayUiSettings => _overlayUiSettings;
   TaskRunState get taskRunState => _taskRunState;
-  bool get isRunning => _taskRunState == TaskRunState.running;
-  bool get isPaused => _taskRunState == TaskRunState.paused;
   bool get isSinglePointModeEnabled => _isSinglePointModeEnabled;
-
-  void updateSettings(ClickerSettings settings) {
-    _settings = settings;
-    notifyListeners();
-  }
-
-  void updateInterval(String value) {
-    final nextValue = int.tryParse(value);
-    if (nextValue == null || nextValue <= 0) {
-      return;
-    }
-
-    _settings = _settings.copyWith(intervalMs: nextValue);
-    notifyListeners();
-  }
-
-  void updateRepeatCount(String value) {
-    final nextValue = int.tryParse(value);
-    if (nextValue == null || nextValue <= 0) {
-      return;
-    }
-
-    _settings = _settings.copyWith(repeatCount: nextValue);
-    notifyListeners();
-  }
-
-  void toggleInfiniteLoop(bool value) {
-    _settings = _settings.copyWith(infiniteLoop: value);
-    notifyListeners();
-  }
-
-  void updateTapDuration(String value) {
-    final nextValue = int.tryParse(value);
-    if (nextValue == null || nextValue <= 0) {
-      return;
-    }
-
-    _settings = _settings.copyWith(tapDurationMs: nextValue);
-    notifyListeners();
-  }
-
-  void updateOverlayUiSettings(OverlayUiSettings settings) {
-    _overlayUiSettings = settings;
-    notifyListeners();
-  }
 
   void updateSinglePointSettings(SinglePointSettings settings) {
     _settings = settings.clickerSettings;
     _overlayUiSettings = settings.overlayUiSettings;
     notifyListeners();
-  }
-
-  void toggleRunning() {
-    if (!_isSinglePointModeEnabled) {
-      return;
-    }
-
-    // 点击任务必须依附于单点模式悬浮窗；未开启模式时不允许进入运行态。
-    setTaskRunState(isRunning ? TaskRunState.idle : TaskRunState.running);
-  }
-
-  void setRunning(bool value) {
-    setTaskRunState(value ? TaskRunState.running : TaskRunState.idle);
   }
 
   void setTaskRunState(TaskRunState value) {

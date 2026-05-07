@@ -156,6 +156,7 @@ class AndroidPermissionService {
     await _invokeAndroidOnly(
       'updateSinglePointOverlayUiSettings',
       arguments: _overlayUiSettingsArguments(settings),
+      ignoreMissingPlugin: true,
     );
   }
 
@@ -164,24 +165,15 @@ class AndroidPermissionService {
   }
 
   Future<void> pauseSinglePointClicking() async {
-    await _invokeAndroidOnly(
-      'pauseSinglePointClicking',
-      fallbackMethod: 'stopSinglePointClicking',
-    );
+    await _invokeAndroidOnly('pauseSinglePointClicking');
   }
 
   Future<void> resumeSinglePointClicking() async {
-    await _invokeAndroidOnly(
-      'resumeSinglePointClicking',
-      fallbackMethod: 'startSinglePointClicking',
-    );
+    await _invokeAndroidOnly('resumeSinglePointClicking');
   }
 
   Future<void> endSinglePointClicking() async {
-    await _invokeAndroidOnly(
-      'endSinglePointClicking',
-      fallbackMethod: 'stopSinglePointClicking',
-    );
+    await _invokeAndroidOnly('endSinglePointClicking');
   }
 
   Future<void> stopSinglePointClicking() async {
@@ -231,7 +223,7 @@ class AndroidPermissionService {
   Future<void> _invokeAndroidOnly(
     String method, {
     Map<String, Object?>? arguments,
-    String? fallbackMethod,
+    bool ignoreMissingPlugin = false,
   }) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return;
@@ -240,10 +232,15 @@ class AndroidPermissionService {
     try {
       await _channel.invokeMethod<void>(method, arguments);
     } on MissingPluginException {
-      // Widget 测试、非 Android 宿主或尚未实现的新原生方法会走这里。
-      if (fallbackMethod != null) {
-        await _invokeAndroidOnly(fallbackMethod, arguments: arguments);
+      // 个别第一阶段先行铺好的协议允许老 Android 端临时忽略；
+      // 暂停/继续/结束这类会改变任务语义的方法必须显式暴露未实现状态。
+      if (ignoreMissingPlugin) {
+        return;
       }
+      throw PlatformException(
+        code: 'unimplemented_method',
+        message: 'Android 尚未实现 $method。',
+      );
     }
   }
 

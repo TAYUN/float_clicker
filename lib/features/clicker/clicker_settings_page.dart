@@ -120,22 +120,28 @@ class _ClickerSettingsPageState extends State<ClickerSettingsPage> {
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
-                    for (final mode in OverlayInteractionMode.values)
-                      RadioListTile<OverlayInteractionMode>(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(mode.label),
-                        subtitle: Text(mode.description),
-                        value: mode,
-                        groupValue: _interactionMode,
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setState(() {
-                            _interactionMode = value;
-                          });
-                        },
+                    RadioGroup<OverlayInteractionMode>(
+                      groupValue: _interactionMode,
+                      onChanged: (value) {
+                        if (value == null) {
+                          return;
+                        }
+                        setState(() {
+                          _interactionMode = value;
+                        });
+                      },
+                      child: Column(
+                        children: [
+                          for (final mode in OverlayInteractionMode.values)
+                            RadioListTile<OverlayInteractionMode>(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(mode.label),
+                              subtitle: Text(mode.description),
+                              value: mode,
+                            ),
+                        ],
                       ),
+                    ),
                   ],
                 ),
               ),
