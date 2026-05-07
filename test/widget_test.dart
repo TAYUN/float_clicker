@@ -86,7 +86,11 @@ void main() {
         .setMockMethodCallHandler(permissionChannel, (call) async {
           methodCalls.add(call);
           if (call.method == 'getPermissionSnapshot') {
-            return {'accessibilityGranted': false, 'overlayGranted': true};
+            return {
+              'accessibilityGranted': false,
+              'accessibilityConnected': false,
+              'overlayGranted': true,
+            };
           }
           if (call.method == 'getSinglePointOverlaySnapshot') {
             return {
@@ -402,6 +406,30 @@ void main() {
 
     expect(find.text('单点任务执行中'), findsOneWidget);
     expect(find.text('已执行 4 次'), findsOneWidget);
+  });
+
+  testWidgets('Home distinguishes accessibility grant and service connection', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+    await tester.pumpAndSettle();
+
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          permissionChannel.name,
+          methodCodec.encodeMethodCall(
+            const MethodCall('permissionSnapshotChanged', {
+              'accessibilityGranted': true,
+              'accessibilityConnected': false,
+              'overlayGranted': true,
+            }),
+          ),
+          (_) {},
+        );
+    await tester.pump();
+
+    expect(find.text('服务未连接'), findsOneWidget);
+    expect(find.text('已开启'), findsOneWidget);
   });
 
   testWidgets('Native overlay position changes are persisted', (tester) async {

@@ -183,6 +183,24 @@ class SinglePointOverlayManager(
         end()
     }
 
+    fun handleAccessibilityServiceDisconnected() {
+        if (taskStatus.taskRunState == TaskRunState.IDLE && taskStatus.executedCount == 0) {
+            return
+        }
+
+        end()
+        Toast.makeText(context.applicationContext, "无障碍服务已断开，点击任务已结束", Toast.LENGTH_SHORT).show()
+    }
+
+    fun handleOverlayPermissionRevoked() {
+        if (!isShowing) {
+            return
+        }
+
+        hide()
+        Toast.makeText(context.applicationContext, "悬浮窗权限已关闭，单点模式已退出", Toast.LENGTH_SHORT).show()
+    }
+
     private fun applySettings(settings: SinglePointOverlaySettings) {
         // 原生侧做最后一道安全裁剪，防止过小间隔或非法次数把调度器拖进异常状态。
         intervalMs = settings.intervalMs.coerceAtLeast(50)

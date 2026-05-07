@@ -7,26 +7,32 @@ import '../../features/clicker/clicker_settings.dart';
 
 typedef SinglePointOverlayStateChanged =
     FutureOr<void> Function(SinglePointOverlaySnapshot snapshot);
+typedef AndroidPermissionStateChanged =
+    FutureOr<void> Function(AndroidPermissionSnapshot snapshot);
 
 class AndroidPermissionSnapshot {
   const AndroidPermissionSnapshot({
     required this.accessibilityGranted,
+    required this.accessibilityConnected,
     required this.overlayGranted,
   });
 
   final bool accessibilityGranted;
+  final bool accessibilityConnected;
   final bool overlayGranted;
 
   factory AndroidPermissionSnapshot.fromMap(Map<Object?, Object?> map) {
     // MethodChannel 传回的是动态 Map，这里集中转换成 Flutter 侧稳定的状态模型。
     return AndroidPermissionSnapshot(
       accessibilityGranted: map['accessibilityGranted'] == true,
+      accessibilityConnected: map['accessibilityConnected'] == true,
       overlayGranted: map['overlayGranted'] == true,
     );
   }
 
   static const unsupported = AndroidPermissionSnapshot(
     accessibilityGranted: false,
+    accessibilityConnected: false,
     overlayGranted: false,
   );
 }
@@ -223,42 +229,13 @@ class AndroidPermissionService {
   void setSinglePointOverlayStateChanged(
     SinglePointOverlayStateChanged? onChanged,
   ) {
-    _channel.setMethodCallHandler(
-      onChanged == null
-          ? null
-          : (call) async {
-              final arguments = call.arguments;
-              if (arguments is! Map<Object?, Object?>) {
-                return;
-              }
+    _singlePointOverlayStateChanged = onChanged;
+    _updateMethodCallHandler();
+  }
 
-              if (call.method == 'singlePointOverlayStateChanged') {
-                await onChanged(SinglePointOverlaySnapshot.fromMap(arguments));
-                return;
-              }
-
-              if (call.method == 'singlePointClickingStateChanged') {
-                await onChanged(
-                  SinglePointOverlaySnapshot(
-                    isEnabled: true,
-                    taskRunState: arguments['taskRunState'] is String
-                        ? TaskRunState.fromName(
-                            arguments['taskRunState'] as String?,
-                          )
-                        : (arguments['isRunning'] == true
-                              ? TaskRunState.running
-                              : TaskRunState.idle),
-                    executedCount:
-                        (arguments['executedCount'] as num?)?.toInt() ?? 0,
-                    overlayUiSettings: _overlayUiSettingsFromMap(arguments),
-                  ),
-                );
-                return;
-              }
-
-              throw MissingPluginException();
-            },
-    );
+  void setPermissionStateChanged(AndroidPermissionStateChanged? onChanged) {
+    _permissionStateChanged = onChanged;
+    _updateMethodCallHandler();
   }
 
   Future<void> _invokeAndroidOnly(
@@ -298,5 +275,55 @@ class AndroidPermissionService {
       'actionButtonPositionY': settings.actionButtonPositionY,
       'isToolbarCollapsed': settings.isToolbarCollapsed,
     };
+  }
+
+  SinglePointOverlayStateChanged? _singlePointOverlayStateChanged;
+  AndroidPermissionStateChanged? _permissionStateChanged;
+
+  void _updateMethodCallHandler() {
+    if (_singlePointOverlayStateChanged == null &&
+        _permissionStateChanged == null) {
+      _channel.setMethodCallHandler(null);
+      return;
+    }
+
+    _channel.setMethodCallHandler((call) async {
+      final arguments = call.arguments;
+      if (arguments is! Map<Object?, Object?>) {
+        return;
+      }
+
+      if (call.method == 'permissionSnapshotChanged') {
+        await _permissionStateChanged?.call(
+          AndroidPermissionSnapshot.fromMap(arguments),
+        );
+        return;
+      }
+
+      if (call.method == 'singlePointOverlayStateChanged') {
+        await _singlePointOverlayStateChanged?.call(
+          SinglePointOverlaySnapshot.fromMap(arguments),
+        );
+        return;
+      }
+
+      if (call.method == 'singlePointClickingStateChanged') {
+        await _singlePointOverlayStateChanged?.call(
+          SinglePointOverlaySnapshot(
+            isEnabled: true,
+            taskRunState: arguments['taskRunState'] is String
+                ? TaskRunState.fromName(arguments['taskRunState'] as String?)
+                : (arguments['isRunning'] == true
+                      ? TaskRunState.running
+                      : TaskRunState.idle),
+            executedCount: (arguments['executedCount'] as num?)?.toInt() ?? 0,
+            overlayUiSettings: _overlayUiSettingsFromMap(arguments),
+          ),
+        );
+        return;
+      }
+
+      throw MissingPluginException();
+    });
   }
 }

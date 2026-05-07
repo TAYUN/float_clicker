@@ -10,6 +10,7 @@ class FloatClickerAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         // Android 系统真正绑定服务后才会回调这里；调度器通过 instance 判断服务是否可用。
         instance = this
+        AccessibilityServiceStateBus.notifyConnected(true)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -26,6 +27,7 @@ class FloatClickerAccessibilityService : AccessibilityService() {
             instance = null
         }
         SinglePointClickScheduler.end()
+        AccessibilityServiceStateBus.notifyConnected(false)
         super.onDestroy()
     }
 

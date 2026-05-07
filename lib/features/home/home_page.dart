@@ -27,11 +27,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _permissionService.setPermissionStateChanged(_handlePermissionChanged);
     _refreshPermissions();
   }
 
   @override
   void dispose() {
+    _permissionService.setPermissionStateChanged(null);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -59,6 +61,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
   }
 
+  void _handlePermissionChanged(AndroidPermissionSnapshot snapshot) {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _permissionSnapshot = snapshot;
+      _isLoadingPermissions = false;
+    });
+  }
+
   Future<void> _openAccessibilitySettings() async {
     await _permissionService.openAccessibilitySettings();
   }
@@ -82,6 +95,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               title: '无障碍权限',
               subtitle: '用于执行模拟点击，需要用户在系统设置中开启',
               isGranted: _permissionSnapshot.accessibilityGranted,
+              isConnected: _permissionSnapshot.accessibilityConnected,
+              connectedLabel: '已连接',
+              disconnectedLabel: '服务未连接',
               isLoading: _isLoadingPermissions,
               onTap: _openAccessibilitySettings,
             ),
@@ -91,6 +107,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               title: '悬浮窗口权限',
               subtitle: '用于显示工具条和点击点，需要允许显示在其他应用上层',
               isGranted: _permissionSnapshot.overlayGranted,
+              isConnected: _permissionSnapshot.overlayGranted,
+              connectedLabel: '已开启',
+              disconnectedLabel: '去开启',
               isLoading: _isLoadingPermissions,
               onTap: _openOverlaySettings,
             ),
@@ -183,6 +202,9 @@ class _PermissionCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.isGranted,
+    required this.isConnected,
+    required this.connectedLabel,
+    required this.disconnectedLabel,
     required this.isLoading,
     required this.onTap,
   });
@@ -191,25 +213,34 @@ class _PermissionCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool isGranted;
+  final bool isConnected;
+  final String connectedLabel;
+  final String disconnectedLabel;
   final bool isLoading;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final status = isLoading ? '检测中' : (isGranted ? '已开启' : '去开启');
+    final status = isLoading
+        ? '检测中'
+        : (!isGranted
+              ? '去开启'
+              : (isConnected ? connectedLabel : disconnectedLabel));
 
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: isGranted ? null : onTap,
+        onTap: isGranted && isConnected ? null : onTap,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               Icon(
                 icon,
-                color: isGranted ? colorScheme.primary : colorScheme.outline,
+                color: isGranted && isConnected
+                    ? colorScheme.primary
+                    : colorScheme.outline,
               ),
               const SizedBox(width: 12),
               Expanded(

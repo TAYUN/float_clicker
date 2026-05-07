@@ -5,6 +5,8 @@ import android.content.res.Configuration
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -14,6 +16,29 @@ class MainActivity : FlutterActivity() {
     private val channelName = "float_clicker/android_permissions"
     private lateinit var channel: MethodChannel
     private lateinit var singlePointOverlayManager: SinglePointOverlayManager
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val overlayPermissionCheckRunnable = object : Runnable {
+        override fun run() {
+            if (::singlePointOverlayManager.isInitialized && singlePointOverlayManager.isShowing && !canDrawOverlays()) {
+                singlePointOverlayManager.handleOverlayPermissionRevoked()
+                if (::channel.isInitialized) {
+                    channel.invokeMethod("permissionSnapshotChanged", getPermissionSnapshot())
+                }
+            }
+            mainHandler.postDelayed(this, overlayPermissionCheckIntervalMs)
+        }
+    }
+    private val accessibilityConnectionListener: (Boolean) -> Unit = { isConnected ->
+        if (::channel.isInitialized) {
+            channel.invokeMethod(
+                "permissionSnapshotChanged",
+                getPermissionSnapshot(),
+            )
+        }
+        if (!isConnected && ::singlePointOverlayManager.isInitialized) {
+            singlePointOverlayManager.handleAccessibilityServiceDisconnected()
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -101,12 +126,16 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        AccessibilityServiceStateBus.addListener(accessibilityConnectionListener)
+        mainHandler.postDelayed(overlayPermissionCheckRunnable, overlayPermissionCheckIntervalMs)
     }
 
     override fun onDestroy() {
         if (::singlePointOverlayManager.isInitialized) {
             singlePointOverlayManager.hide()
         }
+        mainHandler.removeCallbacks(overlayPermissionCheckRunnable)
+        AccessibilityServiceStateBus.removeListener(accessibilityConnectionListener)
         super.onDestroy()
     }
 
@@ -120,6 +149,7 @@ class MainActivity : FlutterActivity() {
     private fun getPermissionSnapshot(): Map<String, Boolean> {
         return mapOf(
             "accessibilityGranted" to isAccessibilityServiceEnabled(),
+            "accessibilityConnected" to (FloatClickerAccessibilityService.instance != null),
             "overlayGranted" to canDrawOverlays(),
         )
     }
@@ -204,5 +234,9 @@ class MainActivity : FlutterActivity() {
             )
             startActivity(intent)
         }
+    }
+
+    companion object {
+        private const val overlayPermissionCheckIntervalMs = 1_000L
     }
 }
