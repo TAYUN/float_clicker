@@ -4,14 +4,18 @@ import 'clicker_settings.dart';
 
 class ClickerController extends ChangeNotifier {
   ClickerSettings _settings = ClickerSettings.defaults;
+  OverlayUiSettings _overlayUiSettings = OverlayUiSettings.defaults;
 
-  // 这两个状态只表示 Flutter 页面当前认为的状态。
+  // 这些状态只表示 Flutter 页面当前认为的状态。
   // 真正的悬浮窗和点击任务在 Android 原生侧维护，页面操作成功后才同步切换这里。
-  bool _isRunning = false;
+  TaskRunState _taskRunState = TaskRunState.idle;
   bool _isSinglePointModeEnabled = false;
 
   ClickerSettings get settings => _settings;
-  bool get isRunning => _isRunning;
+  OverlayUiSettings get overlayUiSettings => _overlayUiSettings;
+  TaskRunState get taskRunState => _taskRunState;
+  bool get isRunning => _taskRunState == TaskRunState.running;
+  bool get isPaused => _taskRunState == TaskRunState.paused;
   bool get isSinglePointModeEnabled => _isSinglePointModeEnabled;
 
   void updateSettings(ClickerSettings settings) {
@@ -54,36 +58,61 @@ class ClickerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateOverlayUiSettings(OverlayUiSettings settings) {
+    _overlayUiSettings = settings;
+    notifyListeners();
+  }
+
+  void updateSinglePointSettings(SinglePointSettings settings) {
+    _settings = settings.clickerSettings;
+    _overlayUiSettings = settings.overlayUiSettings;
+    notifyListeners();
+  }
+
   void toggleRunning() {
     if (!_isSinglePointModeEnabled) {
       return;
     }
 
     // 点击任务必须依附于单点模式悬浮窗；未开启模式时不允许进入运行态。
-    setRunning(!_isRunning);
+    setTaskRunState(isRunning ? TaskRunState.idle : TaskRunState.running);
   }
 
   void setRunning(bool value) {
-    if (!_isSinglePointModeEnabled && value) {
+    setTaskRunState(value ? TaskRunState.running : TaskRunState.idle);
+  }
+
+  void setTaskRunState(TaskRunState value) {
+    if (!_isSinglePointModeEnabled && value != TaskRunState.idle) {
       return;
     }
 
-    if (_isRunning == value) {
+    if (_taskRunState == value) {
       return;
     }
 
-    _isRunning = value;
+    _taskRunState = value;
     notifyListeners();
   }
 
-  void setSinglePointModeState({required bool isEnabled, bool? isRunning}) {
-    final nextRunning = isEnabled ? (isRunning ?? _isRunning) : false;
-    if (_isSinglePointModeEnabled == isEnabled && _isRunning == nextRunning) {
+  void setSinglePointModeState({
+    required bool isEnabled,
+    bool? isRunning,
+    TaskRunState? taskRunState,
+  }) {
+    final nextTaskRunState = isEnabled
+        ? (taskRunState ??
+              (isRunning == null
+                  ? _taskRunState
+                  : (isRunning ? TaskRunState.running : TaskRunState.idle)))
+        : TaskRunState.idle;
+    if (_isSinglePointModeEnabled == isEnabled &&
+        _taskRunState == nextTaskRunState) {
       return;
     }
 
     _isSinglePointModeEnabled = isEnabled;
-    _isRunning = nextRunning;
+    _taskRunState = nextTaskRunState;
     notifyListeners();
   }
 

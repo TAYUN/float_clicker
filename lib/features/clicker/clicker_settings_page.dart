@@ -8,7 +8,7 @@ class ClickerSettingsPage extends StatefulWidget {
 
   static const routeName = '/single-point/settings';
 
-  final ClickerSettings initialSettings;
+  final SinglePointSettings initialSettings;
 
   @override
   State<ClickerSettingsPage> createState() => _ClickerSettingsPageState();
@@ -25,16 +25,19 @@ class _ClickerSettingsPageState extends State<ClickerSettingsPage> {
   void initState() {
     super.initState();
     _intervalController = TextEditingController(
-      text: widget.initialSettings.intervalMs.toString(),
+      text: widget.initialSettings.clickerSettings.intervalMs.toString(),
     );
     _repeatController = TextEditingController(
-      text: widget.initialSettings.repeatCount.toString(),
+      text: widget.initialSettings.clickerSettings.repeatCount.toString(),
     );
     _tapDurationController = TextEditingController(
-      text: widget.initialSettings.tapDurationMs.toString(),
+      text: widget.initialSettings.clickerSettings.tapDurationMs.toString(),
     );
-    _infiniteLoop = widget.initialSettings.infiniteLoop;
+    _infiniteLoop = widget.initialSettings.clickerSettings.infiniteLoop;
+    _interactionMode = widget.initialSettings.overlayUiSettings.interactionMode;
   }
+
+  late OverlayInteractionMode _interactionMode;
 
   @override
   void dispose() {
@@ -48,6 +51,14 @@ class _ClickerSettingsPageState extends State<ClickerSettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('单点设置')),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.all(16),
+        child: FilledButton.icon(
+          onPressed: _save,
+          icon: const Icon(Icons.check),
+          label: const Text('保存'),
+        ),
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -98,11 +109,38 @@ class _ClickerSettingsPageState extends State<ClickerSettingsPage> {
               ),
             ),
             const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _save,
-              icon: const Icon(Icons.check),
-              label: const Text('保存'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '悬浮交互',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    for (final mode in OverlayInteractionMode.values)
+                      RadioListTile<OverlayInteractionMode>(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(mode.label),
+                        subtitle: Text(mode.description),
+                        value: mode,
+                        groupValue: _interactionMode,
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() {
+                            _interactionMode = value;
+                          });
+                        },
+                      ),
+                  ],
+                ),
+              ),
             ),
+            const SizedBox(height: 80),
           ],
         ),
       ),
@@ -128,11 +166,16 @@ class _ClickerSettingsPageState extends State<ClickerSettingsPage> {
 
     // 设置页只负责收集配置，真正应用配置由单点模式页的控制器完成。
     Navigator.of(context).pop(
-      ClickerSettings(
-        intervalMs: intervalMs,
-        repeatCount: repeatCount,
-        infiniteLoop: _infiniteLoop,
-        tapDurationMs: tapDurationMs,
+      SinglePointSettings(
+        clickerSettings: ClickerSettings(
+          intervalMs: intervalMs,
+          repeatCount: repeatCount,
+          infiniteLoop: _infiniteLoop,
+          tapDurationMs: tapDurationMs,
+        ),
+        overlayUiSettings: widget.initialSettings.overlayUiSettings.copyWith(
+          interactionMode: _interactionMode,
+        ),
       ),
     );
   }

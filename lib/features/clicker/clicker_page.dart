@@ -54,6 +54,7 @@ class _ClickerPageState extends State<ClickerPage> {
           repeatCount: settings.repeatCount,
           infiniteLoop: settings.infiniteLoop,
           tapDurationMs: settings.tapDurationMs,
+          overlayUiSettings: _controller.overlayUiSettings,
         );
       } else {
         await _permissionService.hideSinglePointOverlay();
@@ -73,35 +74,30 @@ class _ClickerPageState extends State<ClickerPage> {
   }
 
   Future<void> _loadSavedSettings() async {
-    final settings = await _settingsStore.load();
+    final settings = await _settingsStore.loadSinglePointSettings();
     final overlaySnapshot = await _permissionService
         .getSinglePointOverlaySnapshot();
     if (!mounted) {
       return;
     }
 
-    _controller.updateSettings(settings);
+    _controller.updateSinglePointSettings(settings);
     _controller.setSinglePointModeState(
       isEnabled: overlaySnapshot.isEnabled,
-      isRunning: overlaySnapshot.isRunning,
+      taskRunState: overlaySnapshot.taskRunState,
     );
     setState(() {
       _isLoadingSettings = false;
     });
   }
 
-  Future<void> _toggleRunning() async {
+  Future<void> _startClicking() async {
     try {
-      final shouldRun = !_controller.isRunning;
-      if (shouldRun) {
-        // 原生侧会从当前点击点位置读取屏幕坐标，并通过无障碍服务执行 dispatchGesture。
-        await _permissionService.startSinglePointClicking();
-      } else {
-        await _permissionService.stopSinglePointClicking();
-      }
+      // 原生侧会从当前点击点位置读取屏幕坐标，并通过无障碍服务执行 dispatchGesture。
+      await _permissionService.startSinglePointClicking();
       // 和开启模式一样，点击运行态也等原生调用成功后再更新；
       // 原生工具条也会回传状态事件，这里显式设置可以避免事件先到时被再次翻转。
-      _controller.setRunning(shouldRun);
+      _controller.setTaskRunState(TaskRunState.running);
     } on PlatformException catch (error) {
       if (!mounted) {
         return;
@@ -110,6 +106,51 @@ class _ClickerPageState extends State<ClickerPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(error.message ?? '无法执行点击')));
+    }
+  }
+
+  Future<void> _pauseClicking() async {
+    try {
+      await _permissionService.pauseSinglePointClicking();
+      _controller.setTaskRunState(TaskRunState.paused);
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message ?? '无法暂停点击')));
+    }
+  }
+
+  Future<void> _resumeClicking() async {
+    try {
+      await _permissionService.resumeSinglePointClicking();
+      _controller.setTaskRunState(TaskRunState.running);
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message ?? '无法继续点击')));
+    }
+  }
+
+  Future<void> _endClicking() async {
+    try {
+      await _permissionService.endSinglePointClicking();
+      _controller.setTaskRunState(TaskRunState.idle);
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message ?? '无法结束任务')));
     }
   }
 
@@ -122,15 +163,19 @@ class _ClickerPageState extends State<ClickerPage> {
 
     _controller.setSinglePointModeState(
       isEnabled: snapshot.isEnabled,
-      isRunning: snapshot.isRunning,
+      taskRunState: snapshot.taskRunState,
     );
   }
 
   Future<void> _openSettings() async {
-    final result = await Navigator.of(context).push<ClickerSettings>(
+    final result = await Navigator.of(context).push<SinglePointSettings>(
       MaterialPageRoute(
-        builder: (_) =>
-            ClickerSettingsPage(initialSettings: _controller.settings),
+        builder: (_) => ClickerSettingsPage(
+          initialSettings: SinglePointSettings(
+            clickerSettings: _controller.settings,
+            overlayUiSettings: _controller.overlayUiSettings,
+          ),
+        ),
       ),
     );
 
@@ -138,12 +183,15 @@ class _ClickerPageState extends State<ClickerPage> {
       return;
     }
 
-    await _settingsStore.save(result);
-    _controller.updateSettings(result);
+    await _settingsStore.saveSinglePointSettings(result);
+    _controller.updateSinglePointSettings(result);
     if (_controller.isSinglePointModeEnabled) {
       // 悬浮窗已经创建时，保存新配置后需要同步给 Android，
       // 否则工具条播放按钮仍会按旧间隔/次数执行。
-      await _syncSinglePointSettings(result);
+      await _syncSinglePointSettings(result.clickerSettings);
+      await _permissionService.updateSinglePointOverlayUiSettings(
+        result.overlayUiSettings,
+      );
     }
   }
 
@@ -162,6 +210,7 @@ class _ClickerPageState extends State<ClickerPage> {
       animation: _controller,
       builder: (context, _) {
         final settings = _controller.settings;
+        final overlayUiSettings = _controller.overlayUiSettings;
 
         return Scaffold(
           appBar: AppBar(title: const Text('单点模式')),
@@ -173,7 +222,7 @@ class _ClickerPageState extends State<ClickerPage> {
                     children: [
                       _StatusPanel(
                         isEnabled: _controller.isSinglePointModeEnabled,
-                        isRunning: _controller.isRunning,
+                        taskRunState: _controller.taskRunState,
                       ),
                       const SizedBox(height: 16),
                       Card(
@@ -183,7 +232,7 @@ class _ClickerPageState extends State<ClickerPage> {
                               leading: const Icon(Icons.settings),
                               title: const Text('设置'),
                               subtitle: Text(
-                                '间隔 ${settings.intervalMs} ms，次数 ${settings.infiniteLoop ? '无限循环' : settings.repeatCount}',
+                                '间隔 ${settings.intervalMs} ms，次数 ${settings.infiniteLoop ? '无限循环' : settings.repeatCount}，${overlayUiSettings.interactionMode.label}',
                               ),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _openSettings,
@@ -217,14 +266,12 @@ class _ClickerPageState extends State<ClickerPage> {
                       ),
                       if (_controller.isSinglePointModeEnabled) ...[
                         const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed: _toggleRunning,
-                          icon: Icon(
-                            _controller.isRunning
-                                ? Icons.stop
-                                : Icons.play_arrow,
-                          ),
-                          label: Text(_controller.isRunning ? '停止点击' : '开始点击'),
+                        _TaskControls(
+                          taskRunState: _controller.taskRunState,
+                          onStart: _startClicking,
+                          onPause: _pauseClicking,
+                          onResume: _resumeClicking,
+                          onEnd: _endClicking,
                         ),
                       ],
                     ],
@@ -237,16 +284,26 @@ class _ClickerPageState extends State<ClickerPage> {
 }
 
 class _StatusPanel extends StatelessWidget {
-  const _StatusPanel({required this.isEnabled, required this.isRunning});
+  const _StatusPanel({required this.isEnabled, required this.taskRunState});
 
   final bool isEnabled;
-  final bool isRunning;
+  final TaskRunState taskRunState;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final title = isRunning ? '正在点击' : (isEnabled ? '单点模式已开启' : '未启动');
-    final subtitle = isEnabled ? '后续会创建悬浮工具条和点击点' : '开启后将显示悬浮工具条和一个可拖动点击点';
+    final title = switch ((isEnabled, taskRunState)) {
+      (false, _) => '未启动',
+      (true, TaskRunState.running) => '正在点击',
+      (true, TaskRunState.paused) => '已暂停',
+      (true, TaskRunState.idle) => '单点模式已开启',
+    };
+    final subtitle = switch ((isEnabled, taskRunState)) {
+      (false, _) => '开启后将显示悬浮组件和一个可拖动点击点',
+      (true, TaskRunState.running) => '任务正在执行，点击点移动后下一次点击会使用新位置',
+      (true, TaskRunState.paused) => '任务已暂停，后续原生阶段会保留本轮进度继续执行',
+      (true, TaskRunState.idle) => '悬浮组件已显示，可以开始点击任务',
+    };
 
     return Card(
       child: Padding(
@@ -271,6 +328,57 @@ class _StatusPanel extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _TaskControls extends StatelessWidget {
+  const _TaskControls({
+    required this.taskRunState,
+    required this.onStart,
+    required this.onPause,
+    required this.onResume,
+    required this.onEnd,
+  });
+
+  final TaskRunState taskRunState;
+  final VoidCallback onStart;
+  final VoidCallback onPause;
+  final VoidCallback onResume;
+  final VoidCallback onEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (taskRunState == TaskRunState.idle)
+          OutlinedButton.icon(
+            onPressed: onStart,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('执行任务'),
+          ),
+        if (taskRunState == TaskRunState.running)
+          OutlinedButton.icon(
+            onPressed: onPause,
+            icon: const Icon(Icons.pause),
+            label: const Text('暂停任务'),
+          ),
+        if (taskRunState == TaskRunState.paused)
+          OutlinedButton.icon(
+            onPressed: onResume,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('继续任务'),
+          ),
+        if (taskRunState != TaskRunState.idle) ...[
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: onEnd,
+            icon: const Icon(Icons.stop),
+            label: const Text('结束任务'),
+          ),
+        ],
+      ],
     );
   }
 }

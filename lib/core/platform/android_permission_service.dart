@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../../features/clicker/clicker_settings.dart';
+
 typedef SinglePointOverlayStateChanged =
     void Function(SinglePointOverlaySnapshot snapshot);
 
@@ -30,22 +32,31 @@ class AndroidPermissionSnapshot {
 class SinglePointOverlaySnapshot {
   const SinglePointOverlaySnapshot({
     required this.isEnabled,
-    required this.isRunning,
+    required this.taskRunState,
+    this.executedCount = 0,
   });
 
   final bool isEnabled;
-  final bool isRunning;
+  final TaskRunState taskRunState;
+  final int executedCount;
+
+  bool get isRunning => taskRunState == TaskRunState.running;
 
   factory SinglePointOverlaySnapshot.fromMap(Map<Object?, Object?> map) {
     return SinglePointOverlaySnapshot(
       isEnabled: map['isEnabled'] == true,
-      isRunning: map['isRunning'] == true,
+      taskRunState: map['taskRunState'] is String
+          ? TaskRunState.fromName(map['taskRunState'] as String?)
+          : (map['isRunning'] == true
+                ? TaskRunState.running
+                : TaskRunState.idle),
+      executedCount: (map['executedCount'] as num?)?.toInt() ?? 0,
     );
   }
 
   static const disabled = SinglePointOverlaySnapshot(
     isEnabled: false,
-    isRunning: false,
+    taskRunState: TaskRunState.idle,
   );
 }
 
@@ -87,15 +98,20 @@ class AndroidPermissionService {
     required int repeatCount,
     required bool infiniteLoop,
     required int tapDurationMs,
+    OverlayUiSettings overlayUiSettings = OverlayUiSettings.defaults,
   }) async {
     // 这些配置会被 Android 的 SinglePointOverlayManager 保存，
     // 点击时再交给 SinglePointClickScheduler 生成每次点击请求。
-    await _invokeAndroidOnly('showSinglePointOverlay', {
-      'intervalMs': intervalMs,
-      'repeatCount': repeatCount,
-      'infiniteLoop': infiniteLoop,
-      'tapDurationMs': tapDurationMs,
-    });
+    await _invokeAndroidOnly(
+      'showSinglePointOverlay',
+      arguments: {
+        'intervalMs': intervalMs,
+        'repeatCount': repeatCount,
+        'infiniteLoop': infiniteLoop,
+        'tapDurationMs': tapDurationMs,
+        ..._overlayUiSettingsArguments(overlayUiSettings),
+      },
+    );
   }
 
   Future<void> hideSinglePointOverlay() async {
@@ -123,16 +139,49 @@ class AndroidPermissionService {
     required bool infiniteLoop,
     required int tapDurationMs,
   }) async {
-    await _invokeAndroidOnly('updateSinglePointSettings', {
-      'intervalMs': intervalMs,
-      'repeatCount': repeatCount,
-      'infiniteLoop': infiniteLoop,
-      'tapDurationMs': tapDurationMs,
-    });
+    await _invokeAndroidOnly(
+      'updateSinglePointSettings',
+      arguments: {
+        'intervalMs': intervalMs,
+        'repeatCount': repeatCount,
+        'infiniteLoop': infiniteLoop,
+        'tapDurationMs': tapDurationMs,
+      },
+    );
+  }
+
+  Future<void> updateSinglePointOverlayUiSettings(
+    OverlayUiSettings settings,
+  ) async {
+    await _invokeAndroidOnly(
+      'updateSinglePointOverlayUiSettings',
+      arguments: _overlayUiSettingsArguments(settings),
+    );
   }
 
   Future<void> startSinglePointClicking() async {
     await _invokeAndroidOnly('startSinglePointClicking');
+  }
+
+  Future<void> pauseSinglePointClicking() async {
+    await _invokeAndroidOnly(
+      'pauseSinglePointClicking',
+      fallbackMethod: 'stopSinglePointClicking',
+    );
+  }
+
+  Future<void> resumeSinglePointClicking() async {
+    await _invokeAndroidOnly(
+      'resumeSinglePointClicking',
+      fallbackMethod: 'startSinglePointClicking',
+    );
+  }
+
+  Future<void> endSinglePointClicking() async {
+    await _invokeAndroidOnly(
+      'endSinglePointClicking',
+      fallbackMethod: 'stopSinglePointClicking',
+    );
   }
 
   Future<void> stopSinglePointClicking() async {
@@ -160,7 +209,15 @@ class AndroidPermissionService {
                 onChanged(
                   SinglePointOverlaySnapshot(
                     isEnabled: true,
-                    isRunning: arguments['isRunning'] == true,
+                    taskRunState: arguments['taskRunState'] is String
+                        ? TaskRunState.fromName(
+                            arguments['taskRunState'] as String?,
+                          )
+                        : (arguments['isRunning'] == true
+                              ? TaskRunState.running
+                              : TaskRunState.idle),
+                    executedCount:
+                        (arguments['executedCount'] as num?)?.toInt() ?? 0,
                   ),
                 );
                 return;
@@ -172,9 +229,10 @@ class AndroidPermissionService {
   }
 
   Future<void> _invokeAndroidOnly(
-    String method, [
+    String method, {
     Map<String, Object?>? arguments,
-  ]) async {
+    String? fallbackMethod,
+  }) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return;
     }
@@ -182,7 +240,25 @@ class AndroidPermissionService {
     try {
       await _channel.invokeMethod<void>(method, arguments);
     } on MissingPluginException {
-      // Widget 测试和非 Android 宿主没有原生 MethodChannel 实现，直接跳过。
+      // Widget 测试、非 Android 宿主或尚未实现的新原生方法会走这里。
+      if (fallbackMethod != null) {
+        await _invokeAndroidOnly(fallbackMethod, arguments: arguments);
+      }
     }
+  }
+
+  Map<String, Object?> _overlayUiSettingsArguments(OverlayUiSettings settings) {
+    return {
+      'interactionMode': settings.interactionMode.name,
+      'targetPositionX': settings.targetPositionX,
+      'targetPositionY': settings.targetPositionY,
+      'toolbarPositionX': settings.toolbarPositionX,
+      'toolbarPositionY': settings.toolbarPositionY,
+      'collapsedToolbarPositionX': settings.collapsedToolbarPositionX,
+      'collapsedToolbarPositionY': settings.collapsedToolbarPositionY,
+      'actionButtonPositionX': settings.actionButtonPositionX,
+      'actionButtonPositionY': settings.actionButtonPositionY,
+      'isToolbarCollapsed': settings.isToolbarCollapsed,
+    };
   }
 }

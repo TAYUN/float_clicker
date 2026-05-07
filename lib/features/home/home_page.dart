@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/platform/android_permission_service.dart';
+import '../clicker/clicker_settings.dart';
 import '../clicker/clicker_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -18,6 +19,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   AndroidPermissionSnapshot _permissionSnapshot =
       AndroidPermissionSnapshot.unsupported;
+  SinglePointOverlaySnapshot _singlePointSnapshot =
+      SinglePointOverlaySnapshot.disabled;
   bool _isLoadingPermissions = true;
 
   @override
@@ -43,12 +46,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _refreshPermissions() async {
     final snapshot = await _permissionService.getSnapshot();
+    final singlePointSnapshot = await _permissionService
+        .getSinglePointOverlaySnapshot();
     if (!mounted) {
       return;
     }
 
     setState(() {
       _permissionSnapshot = snapshot;
+      _singlePointSnapshot = singlePointSnapshot;
       _isLoadingPermissions = false;
     });
   }
@@ -89,6 +95,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               onTap: _openOverlaySettings,
             ),
             const SizedBox(height: 24),
+            Text('当前运行状态', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            _RunStateCard(snapshot: _singlePointSnapshot),
+            const SizedBox(height: 24),
             Text('点击模式', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
             _ModeTile(
@@ -105,6 +115,43 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               title: '多点模式',
               subtitle: '多个点击点按顺序执行，后续开发',
               trailing: _ComingSoonPill(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RunStateCard extends StatelessWidget {
+  const _RunStateCard({required this.snapshot});
+
+  final SinglePointOverlaySnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final title = switch ((snapshot.isEnabled, snapshot.taskRunState)) {
+      (false, _) => '未启动',
+      (true, TaskRunState.running) => '单点任务执行中',
+      (true, TaskRunState.paused) => '单点任务已暂停',
+      (true, TaskRunState.idle) => '单点模式已开启',
+    };
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(
+              snapshot.isEnabled ? Icons.touch_app : Icons.do_not_disturb_on,
+              color: snapshot.isEnabled
+                  ? colorScheme.primary
+                  : colorScheme.outline,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(title, style: Theme.of(context).textTheme.titleSmall),
             ),
           ],
         ),
