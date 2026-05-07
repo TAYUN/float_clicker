@@ -12,6 +12,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -40,12 +41,13 @@ class SinglePointOverlayManager(
     private var infiniteLoop = false
     private var tapDurationMs = 50
     val isShowing: Boolean
-        get() = targetView != null && toolbarView != null
+        get() = targetView != null
     val snapshot: SinglePointOverlaySnapshot
         get() = SinglePointOverlaySnapshot(
             isEnabled = isShowing,
             taskRunState = if (isShowing) taskStatus.taskRunState else TaskRunState.IDLE,
             executedCount = if (isShowing) taskStatus.executedCount else 0,
+            interactionState = if (isShowing) interactionState else null,
         )
 
     fun show(settings: SinglePointOverlaySettings = SinglePointOverlaySettings()) {
@@ -295,11 +297,25 @@ class SinglePointOverlayManager(
     }
 
     private fun toggleTaskRunState() {
-        when (taskStatus.taskRunState) {
+        val handled = when (taskStatus.taskRunState) {
             TaskRunState.IDLE -> start()
             TaskRunState.RUNNING -> pause()
             TaskRunState.PAUSED -> resume()
         }
+
+        if (!handled) {
+            showTaskActionFailure()
+        }
+    }
+
+    private fun showTaskActionFailure() {
+        val message = when (taskStatus.taskRunState) {
+            TaskRunState.IDLE -> "无障碍服务未连接，无法执行点击"
+            TaskRunState.RUNNING -> "当前任务状态已变化，无法暂停"
+            TaskRunState.PAUSED -> "无障碍服务未连接，无法继续点击"
+        }
+        // 悬浮控件不依赖 Flutter 页面存在，失败原因直接用系统 Toast 告知用户。
+        Toast.makeText(context.applicationContext, message, Toast.LENGTH_SHORT).show()
     }
 
     private fun notifyOverlayStateChanged() {
@@ -528,6 +544,7 @@ class SinglePointOverlayManager(
                         touchedView.performClick()
                     } else {
                         onPositionChanged(OverlayPoint(x = logicalPosition(params.x), y = logicalPosition(params.y)))
+                        notifyOverlayStateChanged()
                     }
                     true
                 }

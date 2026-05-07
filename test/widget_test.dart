@@ -12,6 +12,8 @@ void main() {
   var nativeOverlayEnabled = false;
   var nativeTaskRunState = 'idle';
   var nativeExecutedCount = 0;
+  var nativeOverlaySettings = <String, Object?>{};
+  PlatformException? nativeStartFailure;
 
   Future<void> sendSinglePointClickingState(
     String taskRunState, {
@@ -26,6 +28,7 @@ void main() {
             MethodCall('singlePointClickingStateChanged', {
               'taskRunState': taskRunState,
               'executedCount': executedCount,
+              ...nativeOverlaySettings,
             }),
           ),
           (_) {},
@@ -48,6 +51,7 @@ void main() {
               'isEnabled': isEnabled,
               'taskRunState': taskRunState,
               'executedCount': executedCount,
+              if (isEnabled) ...nativeOverlaySettings,
             }),
           ),
           (_) {},
@@ -75,6 +79,8 @@ void main() {
     nativeOverlayEnabled = false;
     nativeTaskRunState = 'idle';
     nativeExecutedCount = 0;
+    nativeOverlaySettings = _defaultNativeOverlaySettings();
+    nativeStartFailure = null;
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(permissionChannel, (call) async {
@@ -87,12 +93,14 @@ void main() {
               'isEnabled': nativeOverlayEnabled,
               'taskRunState': nativeTaskRunState,
               'executedCount': nativeExecutedCount,
+              if (nativeOverlayEnabled) ...nativeOverlaySettings,
             };
           }
           if (call.method == 'showSinglePointOverlay') {
             nativeOverlayEnabled = true;
             nativeTaskRunState = 'idle';
             nativeExecutedCount = 0;
+            nativeOverlaySettings = _objectMap(call.arguments);
             return null;
           }
           if (call.method == 'hideSinglePointOverlay') {
@@ -102,6 +110,10 @@ void main() {
             return null;
           }
           if (call.method == 'startSinglePointClicking') {
+            final failure = nativeStartFailure;
+            if (failure != null) {
+              throw failure;
+            }
             nativeTaskRunState = 'running';
             return null;
           }
@@ -121,6 +133,10 @@ void main() {
           if (call.method == 'stopSinglePointClicking') {
             nativeTaskRunState = 'idle';
             nativeExecutedCount = 0;
+            return null;
+          }
+          if (call.method == 'updateSinglePointOverlayUiSettings') {
+            nativeOverlaySettings = _objectMap(call.arguments);
             return null;
           }
           return null;
@@ -328,6 +344,31 @@ void main() {
     expect(find.text('Android 尚未实现 pauseSinglePointClicking。'), findsNothing);
   });
 
+  testWidgets('Single point page explains accessibility start failure', (
+    tester,
+  ) async {
+    nativeStartFailure = PlatformException(
+      code: 'accessibility_service_unavailable',
+      message: 'Accessibility service is not running.',
+    );
+
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tester.tap(find.text('单点模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开启单点模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('执行任务'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('无障碍服务未连接，请先在系统设置中开启 Float Clicker 无障碍服务。'),
+      findsOneWidget,
+    );
+    expect(find.text('单点模式已开启'), findsOneWidget);
+    expect(find.text('执行任务'), findsOneWidget);
+  });
+
   testWidgets('Single point page displays native executed count', (
     tester,
   ) async {
@@ -361,6 +402,40 @@ void main() {
 
     expect(find.text('单点任务执行中'), findsOneWidget);
     expect(find.text('已执行 4 次'), findsOneWidget);
+  });
+
+  testWidgets('Native overlay position changes are persisted', (tester) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tester.tap(find.text('单点模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开启单点模式'));
+    await tester.pumpAndSettle();
+
+    nativeOverlaySettings = {
+      ...nativeOverlaySettings,
+      'targetPositionX': 321,
+      'targetPositionY': 432,
+    };
+    await sendSinglePointOverlayState(isEnabled: true, taskRunState: 'idle');
+    await tester.pumpAndSettle();
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('单点模式'));
+    await tester.pumpAndSettle();
+
+    methodCalls.clear();
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+    await tapVisibleText(tester, '保存');
+
+    final overlayUpdateCall = methodCalls.lastWhere(
+      (call) => call.method == 'updateSinglePointOverlayUiSettings',
+    );
+    final arguments = overlayUpdateCall.arguments as Map<Object?, Object?>;
+    expect(arguments['targetPositionX'], 321);
+    expect(arguments['targetPositionY'], 432);
   });
 
   testWidgets('Leaving mode page keeps native single point overlay enabled', (
@@ -403,4 +478,23 @@ void main() {
     expect(find.text('未启动'), findsOneWidget);
     expect(find.text('开启单点模式'), findsOneWidget);
   });
+}
+
+Map<String, Object?> _defaultNativeOverlaySettings() {
+  return {
+    'interactionMode': 'normal',
+    'targetPositionX': 280,
+    'targetPositionY': 260,
+    'toolbarPositionX': 18,
+    'toolbarPositionY': 180,
+    'collapsedToolbarPositionX': 18,
+    'collapsedToolbarPositionY': 180,
+    'actionButtonPositionX': 18,
+    'actionButtonPositionY': 260,
+    'isToolbarCollapsed': false,
+  };
+}
+
+Map<String, Object?> _objectMap(Object? value) {
+  return Map<String, Object?>.from(value as Map<Object?, Object?>);
 }

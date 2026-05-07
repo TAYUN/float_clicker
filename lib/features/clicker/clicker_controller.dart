@@ -24,6 +24,15 @@ class ClickerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateOverlayUiSettings(OverlayUiSettings settings) {
+    if (_overlayUiSettings == settings) {
+      return;
+    }
+
+    _overlayUiSettings = settings;
+    notifyListeners();
+  }
+
   void setTaskRunState(TaskRunState value, {int? executedCount}) {
     if (!_isSinglePointModeEnabled && value != TaskRunState.idle) {
       return;

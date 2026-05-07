@@ -42,7 +42,7 @@ class MainActivity : FlutterActivity() {
                 "showSinglePointOverlay" -> {
                     // 悬浮窗权限必须在创建 WindowManager overlay 前确认，否则 addView 会失败。
                     if (!canDrawOverlays()) {
-                        result.error("overlay_permission_denied", "Overlay permission is not granted.", null)
+                        result.error("overlay_permission_denied", "悬浮窗权限未开启，请先在系统设置中允许显示在其他应用上层。", null)
                         return@setMethodCallHandler
                     }
                     singlePointOverlayManager.show(singlePointOverlaySettingsFrom(call.arguments))
@@ -62,7 +62,7 @@ class MainActivity : FlutterActivity() {
                     if (started) {
                         result.success(null)
                     } else {
-                        result.error("accessibility_service_unavailable", "Accessibility service is not running.", null)
+                        result.error("accessibility_service_unavailable", "无障碍服务未连接，请先在系统设置中开启 Float Clicker 无障碍服务。", null)
                     }
                 }
                 "stopSinglePointClicking" -> {
@@ -74,7 +74,7 @@ class MainActivity : FlutterActivity() {
                     if (paused) {
                         result.success(null)
                     } else {
-                        result.error("invalid_task_state", "Single point task is not running.", null)
+                        result.error("invalid_task_state", "当前没有正在执行的点击任务，无法暂停。", null)
                     }
                 }
                 "resumeSinglePointClicking" -> {
@@ -84,7 +84,7 @@ class MainActivity : FlutterActivity() {
                     } else {
                         result.error(
                             "accessibility_service_unavailable",
-                            "Accessibility service is not running or task is not paused.",
+                            "无障碍服务未连接，或当前任务不是暂停状态，无法继续点击。",
                             null,
                         )
                     }

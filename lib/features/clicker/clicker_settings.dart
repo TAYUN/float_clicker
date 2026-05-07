@@ -153,6 +153,37 @@ class OverlayUiSettings {
       isToolbarCollapsed: isToolbarCollapsed ?? this.isToolbarCollapsed,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    return other is OverlayUiSettings &&
+        other.interactionMode == interactionMode &&
+        other.targetPositionX == targetPositionX &&
+        other.targetPositionY == targetPositionY &&
+        other.toolbarPositionX == toolbarPositionX &&
+        other.toolbarPositionY == toolbarPositionY &&
+        other.collapsedToolbarPositionX == collapsedToolbarPositionX &&
+        other.collapsedToolbarPositionY == collapsedToolbarPositionY &&
+        other.actionButtonPositionX == actionButtonPositionX &&
+        other.actionButtonPositionY == actionButtonPositionY &&
+        other.isToolbarCollapsed == isToolbarCollapsed;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(
+      interactionMode,
+      targetPositionX,
+      targetPositionY,
+      toolbarPositionX,
+      toolbarPositionY,
+      collapsedToolbarPositionX,
+      collapsedToolbarPositionY,
+      actionButtonPositionX,
+      actionButtonPositionY,
+      isToolbarCollapsed,
+    );
+  }
 }
 
 class SinglePointSettings {

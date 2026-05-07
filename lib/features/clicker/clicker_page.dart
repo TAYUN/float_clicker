@@ -62,14 +62,7 @@ class _ClickerPageState extends State<ClickerPage> {
       // 只有 MethodChannel 调用成功后才更新 Flutter 状态，避免原生失败时 UI 误显示已开启。
       _controller.setSinglePointModeState(isEnabled: shouldEnable);
     } on PlatformException catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      // 当前最常见失败原因是悬浮窗权限未开启，先用 SnackBar 明确提示用户。
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message ?? '无法开启悬浮窗')));
+      _showPlatformError(error, fallback: '无法开启悬浮窗');
     }
   }
 
@@ -82,6 +75,7 @@ class _ClickerPageState extends State<ClickerPage> {
     }
 
     _controller.updateSinglePointSettings(settings);
+    await _applyOverlayUiSettingsFromSnapshot(overlaySnapshot);
     _controller.setSinglePointModeState(
       isEnabled: overlaySnapshot.isEnabled,
       taskRunState: overlaySnapshot.taskRunState,
@@ -100,13 +94,7 @@ class _ClickerPageState extends State<ClickerPage> {
       // 原生工具条也会回传状态事件，这里显式设置可以避免事件先到时被再次翻转。
       _controller.setTaskRunState(TaskRunState.running);
     } on PlatformException catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message ?? '无法执行点击')));
+      _showPlatformError(error, fallback: '无法执行点击');
     }
   }
 
@@ -115,13 +103,7 @@ class _ClickerPageState extends State<ClickerPage> {
       await _permissionService.pauseSinglePointClicking();
       _controller.setTaskRunState(TaskRunState.paused);
     } on PlatformException catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message ?? '无法暂停点击')));
+      _showPlatformError(error, fallback: '无法暂停点击');
     }
   }
 
@@ -130,13 +112,7 @@ class _ClickerPageState extends State<ClickerPage> {
       await _permissionService.resumeSinglePointClicking();
       _controller.setTaskRunState(TaskRunState.running);
     } on PlatformException catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message ?? '无法继续点击')));
+      _showPlatformError(error, fallback: '无法继续点击');
     }
   }
 
@@ -145,28 +121,61 @@ class _ClickerPageState extends State<ClickerPage> {
       await _permissionService.endSinglePointClicking();
       _controller.setTaskRunState(TaskRunState.idle);
     } on PlatformException catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message ?? '无法结束任务')));
+      _showPlatformError(error, fallback: '无法结束任务');
     }
   }
 
-  void _handleSinglePointOverlayStateChanged(
-    SinglePointOverlaySnapshot snapshot,
-  ) {
+  void _showPlatformError(PlatformException error, {required String fallback}) {
     if (!mounted) {
       return;
     }
 
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_platformErrorMessage(error, fallback))),
+    );
+  }
+
+  String _platformErrorMessage(PlatformException error, String fallback) {
+    // MethodChannel 错误码是 Flutter 与 Android 之间的稳定协议；文案集中映射，避免旧原生英文透到界面上。
+    return switch (error.code) {
+      'overlay_permission_denied' => '悬浮窗权限未开启，请先在系统设置中允许显示在其他应用上层。',
+      'accessibility_service_unavailable' =>
+        '无障碍服务未连接，请先在系统设置中开启 Float Clicker 无障碍服务。',
+      'invalid_task_state' => '当前任务状态不支持该操作，请根据页面状态重新执行。',
+      'unimplemented_method' => error.message ?? '当前 Android 版本暂不支持该操作。',
+      _ =>
+        (error.message?.trim().isNotEmpty ?? false)
+            ? error.message!.trim()
+            : fallback,
+    };
+  }
+
+  Future<void> _handleSinglePointOverlayStateChanged(
+    SinglePointOverlaySnapshot snapshot,
+  ) async {
+    if (!mounted) {
+      return;
+    }
+
+    await _applyOverlayUiSettingsFromSnapshot(snapshot);
     _controller.setSinglePointModeState(
       isEnabled: snapshot.isEnabled,
       taskRunState: snapshot.taskRunState,
       executedCount: snapshot.executedCount,
     );
+  }
+
+  Future<void> _applyOverlayUiSettingsFromSnapshot(
+    SinglePointOverlaySnapshot snapshot,
+  ) async {
+    final settings = snapshot.overlayUiSettings;
+    if (settings == null || settings == _controller.overlayUiSettings) {
+      return;
+    }
+
+    _controller.updateOverlayUiSettings(settings);
+    // 原生拖动结束后会回传最新逻辑坐标；这里立即保存，保证下次开启时位置不回弹。
+    await _settingsStore.saveOverlayUiSettings(settings);
   }
 
   Future<void> _openSettings() async {

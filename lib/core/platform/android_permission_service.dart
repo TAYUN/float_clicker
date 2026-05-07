@@ -1,10 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../../features/clicker/clicker_settings.dart';
 
 typedef SinglePointOverlayStateChanged =
-    void Function(SinglePointOverlaySnapshot snapshot);
+    FutureOr<void> Function(SinglePointOverlaySnapshot snapshot);
 
 class AndroidPermissionSnapshot {
   const AndroidPermissionSnapshot({
@@ -34,11 +36,13 @@ class SinglePointOverlaySnapshot {
     required this.isEnabled,
     required this.taskRunState,
     this.executedCount = 0,
+    this.overlayUiSettings,
   });
 
   final bool isEnabled;
   final TaskRunState taskRunState;
   final int executedCount;
+  final OverlayUiSettings? overlayUiSettings;
 
   bool get isRunning => taskRunState == TaskRunState.running;
 
@@ -51,12 +55,48 @@ class SinglePointOverlaySnapshot {
                 ? TaskRunState.running
                 : TaskRunState.idle),
       executedCount: (map['executedCount'] as num?)?.toInt() ?? 0,
+      overlayUiSettings: _overlayUiSettingsFromMap(map),
     );
   }
 
   static const disabled = SinglePointOverlaySnapshot(
     isEnabled: false,
     taskRunState: TaskRunState.idle,
+  );
+}
+
+OverlayUiSettings? _overlayUiSettingsFromMap(Map<Object?, Object?> map) {
+  if (map['interactionMode'] is! String) {
+    return null;
+  }
+
+  final defaults = OverlayUiSettings.defaults;
+  return OverlayUiSettings(
+    interactionMode: OverlayInteractionMode.fromName(
+      map['interactionMode'] as String?,
+    ),
+    targetPositionX:
+        (map['targetPositionX'] as num?)?.toInt() ?? defaults.targetPositionX,
+    targetPositionY:
+        (map['targetPositionY'] as num?)?.toInt() ?? defaults.targetPositionY,
+    toolbarPositionX:
+        (map['toolbarPositionX'] as num?)?.toInt() ?? defaults.toolbarPositionX,
+    toolbarPositionY:
+        (map['toolbarPositionY'] as num?)?.toInt() ?? defaults.toolbarPositionY,
+    collapsedToolbarPositionX:
+        (map['collapsedToolbarPositionX'] as num?)?.toInt() ??
+        defaults.collapsedToolbarPositionX,
+    collapsedToolbarPositionY:
+        (map['collapsedToolbarPositionY'] as num?)?.toInt() ??
+        defaults.collapsedToolbarPositionY,
+    actionButtonPositionX:
+        (map['actionButtonPositionX'] as num?)?.toInt() ??
+        defaults.actionButtonPositionX,
+    actionButtonPositionY:
+        (map['actionButtonPositionY'] as num?)?.toInt() ??
+        defaults.actionButtonPositionY,
+    isToolbarCollapsed:
+        (map['isToolbarCollapsed'] as bool?) ?? defaults.isToolbarCollapsed,
   );
 }
 
@@ -193,12 +233,12 @@ class AndroidPermissionService {
               }
 
               if (call.method == 'singlePointOverlayStateChanged') {
-                onChanged(SinglePointOverlaySnapshot.fromMap(arguments));
+                await onChanged(SinglePointOverlaySnapshot.fromMap(arguments));
                 return;
               }
 
               if (call.method == 'singlePointClickingStateChanged') {
-                onChanged(
+                await onChanged(
                   SinglePointOverlaySnapshot(
                     isEnabled: true,
                     taskRunState: arguments['taskRunState'] is String
@@ -210,6 +250,7 @@ class AndroidPermissionService {
                               : TaskRunState.idle),
                     executedCount:
                         (arguments['executedCount'] as num?)?.toInt() ?? 0,
+                    overlayUiSettings: _overlayUiSettingsFromMap(arguments),
                   ),
                 );
                 return;
