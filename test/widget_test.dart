@@ -9,7 +9,6 @@ void main() {
   const permissionChannel = MethodChannel('float_clicker/android_permissions');
   const methodCodec = StandardMethodCodec();
   final methodCalls = <MethodCall>[];
-  final missingNativeMethods = <String>{};
   var nativeOverlayEnabled = false;
   var nativeTaskRunState = 'idle';
 
@@ -64,16 +63,12 @@ void main() {
 
   setUp(() {
     methodCalls.clear();
-    missingNativeMethods.clear();
     nativeOverlayEnabled = false;
     nativeTaskRunState = 'idle';
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(permissionChannel, (call) async {
           methodCalls.add(call);
-          if (missingNativeMethods.contains(call.method)) {
-            throw MissingPluginException();
-          }
           if (call.method == 'getPermissionSnapshot') {
             return {'accessibilityGranted': false, 'overlayGranted': true};
           }
@@ -298,11 +293,9 @@ void main() {
     expect(find.text('执行任务'), findsOneWidget);
   });
 
-  testWidgets('Unimplemented native pause keeps running UI unchanged', (
+  testWidgets('Native pause protocol switches UI to paused state', (
     tester,
   ) async {
-    missingNativeMethods.add('pauseSinglePointClicking');
-
     await tester.pumpWidget(const FloatClickerApp());
 
     await tester.tap(find.text('单点模式'));
@@ -315,9 +308,9 @@ void main() {
     await tester.tap(find.text('暂停任务'));
     await tester.pumpAndSettle();
 
-    expect(find.text('正在点击'), findsOneWidget);
-    expect(find.text('暂停任务'), findsOneWidget);
-    expect(find.text('Android 尚未实现 pauseSinglePointClicking。'), findsOneWidget);
+    expect(find.text('已暂停'), findsOneWidget);
+    expect(find.text('继续任务'), findsOneWidget);
+    expect(find.text('Android 尚未实现 pauseSinglePointClicking。'), findsNothing);
   });
 
   testWidgets('Leaving mode page keeps native single point overlay enabled', (

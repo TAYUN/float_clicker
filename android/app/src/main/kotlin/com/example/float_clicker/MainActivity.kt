@@ -17,10 +17,10 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
-        singlePointOverlayManager = SinglePointOverlayManager(this) { isEnabled, isRunning ->
+        singlePointOverlayManager = SinglePointOverlayManager(this) { snapshot ->
             channel.invokeMethod(
                 "singlePointOverlayStateChanged",
-                singlePointOverlaySnapshot(isEnabled = isEnabled, isRunning = isRunning),
+                snapshot.toMap(),
             )
         }
 
@@ -29,12 +29,7 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "getPermissionSnapshot" -> result.success(getPermissionSnapshot())
                 "getSinglePointOverlaySnapshot" -> {
-                    result.success(
-                        singlePointOverlaySnapshot(
-                            isEnabled = singlePointOverlayManager.isShowing,
-                            isRunning = singlePointOverlayManager.isClickingRunning,
-                        ),
-                    )
+                    result.success(singlePointOverlayManager.snapshot.toMap())
                 }
                 "openAccessibilitySettings" -> {
                     openAccessibilitySettings()
@@ -74,6 +69,34 @@ class MainActivity : FlutterActivity() {
                     singlePointOverlayManager.stop()
                     result.success(null)
                 }
+                "pauseSinglePointClicking" -> {
+                    val paused = singlePointOverlayManager.pause()
+                    if (paused) {
+                        result.success(null)
+                    } else {
+                        result.error("invalid_task_state", "Single point task is not running.", null)
+                    }
+                }
+                "resumeSinglePointClicking" -> {
+                    val resumed = singlePointOverlayManager.resume()
+                    if (resumed) {
+                        result.success(null)
+                    } else {
+                        result.error(
+                            "accessibility_service_unavailable",
+                            "Accessibility service is not running or task is not paused.",
+                            null,
+                        )
+                    }
+                }
+                "endSinglePointClicking" -> {
+                    singlePointOverlayManager.end()
+                    result.success(null)
+                }
+                "updateSinglePointOverlayUiSettings" -> {
+                    // 悬浮组件拆分阶段会消费完整交互配置；三态调度阶段先接住协议，避免 Flutter 侧报未实现。
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -90,13 +113,6 @@ class MainActivity : FlutterActivity() {
         return mapOf(
             "accessibilityGranted" to isAccessibilityServiceEnabled(),
             "overlayGranted" to canDrawOverlays(),
-        )
-    }
-
-    private fun singlePointOverlaySnapshot(isEnabled: Boolean, isRunning: Boolean): Map<String, Boolean> {
-        return mapOf(
-            "isEnabled" to isEnabled,
-            "isRunning" to isRunning,
         )
     }
 

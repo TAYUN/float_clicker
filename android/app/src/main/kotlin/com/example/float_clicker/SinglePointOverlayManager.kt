@@ -17,7 +17,7 @@ import kotlin.math.roundToInt
 
 class SinglePointOverlayManager(
     private val context: Context,
-    private val onOverlayStateChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
+    private val onOverlayStateChanged: (SinglePointOverlaySnapshot) -> Unit = {},
 ) {
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
@@ -26,7 +26,7 @@ class SinglePointOverlayManager(
     private var targetView: View? = null
     private var targetParams: WindowManager.LayoutParams? = null
     private var toolbarView: LinearLayout? = null
-    private var isRunning = false
+    private var taskStatus = SinglePointTaskStatus()
 
     // 当前配置保存在 overlay 管理器中。真正开始点击时会打包成 SinglePointClickRequest。
     private var intervalMs = 500
@@ -35,8 +35,12 @@ class SinglePointOverlayManager(
     private var tapDurationMs = 50
     val isShowing: Boolean
         get() = targetView != null && toolbarView != null
-    val isClickingRunning: Boolean
-        get() = isRunning
+    val snapshot: SinglePointOverlaySnapshot
+        get() = SinglePointOverlaySnapshot(
+            isEnabled = isShowing,
+            taskRunState = if (isShowing) taskStatus.taskRunState else TaskRunState.IDLE,
+            executedCount = if (isShowing) taskStatus.executedCount else 0,
+        )
 
     fun show(settings: SinglePointOverlaySettings = SinglePointOverlaySettings()) {
         updateSettings(settings)
@@ -74,7 +78,7 @@ class SinglePointOverlayManager(
     }
 
     fun hide() {
-        stop()
+        end()
         removeView(targetView)
         removeView(toolbarView)
         targetView = null
@@ -84,6 +88,10 @@ class SinglePointOverlayManager(
     }
 
     fun start(): Boolean {
+        if (taskStatus.taskRunState != TaskRunState.IDLE) {
+            return false
+        }
+
         val target = targetView ?: return false
         // provider 每次点击前都会重新读取目标点中心坐标。
         // 这样用户在点击过程中移动目标点，下一次点击会使用最新位置。
@@ -99,23 +107,37 @@ class SinglePointOverlayManager(
                     tapDurationMs = tapDurationMs,
                 )
             },
-            onStopped = ::handleSchedulerStopped,
+            onStatusChanged = ::handleSchedulerStatusChanged,
         )
 
         // 运行时让目标点不拦截触摸，减少它挡住被点击 App 控件的概率。
-        if (started) {
-            setRunningState(true)
-        }
         return started
     }
 
-    fun stop() {
-        SinglePointClickScheduler.stop()
-        setRunningState(false)
+    fun pause(): Boolean {
+        return SinglePointClickScheduler.pause()
     }
 
-    private fun handleSchedulerStopped() {
-        setRunningState(false)
+    fun resume(): Boolean {
+        return SinglePointClickScheduler.resume()
+    }
+
+    fun end() {
+        SinglePointClickScheduler.end()
+        if (taskStatus.taskRunState != TaskRunState.IDLE || taskStatus.executedCount != 0) {
+            handleSchedulerStatusChanged(SinglePointTaskStatus())
+        }
+    }
+
+    fun stop() {
+        end()
+    }
+
+    private fun handleSchedulerStatusChanged(status: SinglePointTaskStatus) {
+        taskStatus = if (isShowing) status else SinglePointTaskStatus()
+        setTargetTouchable(taskStatus.taskRunState != TaskRunState.RUNNING)
+        refreshToolbarState()
+        notifyOverlayStateChanged()
     }
 
     private fun createTargetView(): View {
@@ -155,7 +177,7 @@ class SinglePointOverlayManager(
 
             // 只有第一个按钮负责拖拽，避免运行/关闭按钮拦截整条工具条的移动手势。
             addView(toolbarButton("✥", textSize = 24f, onClick = null))
-            addView(toolbarButton("▶", textSize = 24f) { toggleRunning() })
+            addView(toolbarButton("▶", textSize = 24f) { toggleTaskRunState() })
             addView(toolbarButton("×", textSize = 24f) { hide() })
         }
     }
@@ -178,34 +200,34 @@ class SinglePointOverlayManager(
     private fun refreshToolbarState() {
         val toolbar = toolbarView ?: return
         (toolbar.getChildAt(1) as? TextView)?.apply {
-            text = if (isRunning) "■" else "▶"
-            textSize = if (isRunning) 18f else 24f
-            contentDescription = if (isRunning) "停止点击" else "开始点击"
+            text = when (taskStatus.taskRunState) {
+                TaskRunState.IDLE -> "▶"
+                TaskRunState.RUNNING -> "Ⅱ"
+                TaskRunState.PAUSED -> "▶"
+            }
+            textSize = when (taskStatus.taskRunState) {
+                TaskRunState.IDLE,
+                TaskRunState.PAUSED -> 24f
+                TaskRunState.RUNNING -> 20f
+            }
+            contentDescription = when (taskStatus.taskRunState) {
+                TaskRunState.IDLE -> "开始点击"
+                TaskRunState.RUNNING -> "暂停点击"
+                TaskRunState.PAUSED -> "继续点击"
+            }
         }
     }
 
-    private fun toggleRunning() {
-        if (isRunning) {
-            stop()
-        } else {
-            start()
+    private fun toggleTaskRunState() {
+        when (taskStatus.taskRunState) {
+            TaskRunState.IDLE -> start()
+            TaskRunState.RUNNING -> pause()
+            TaskRunState.PAUSED -> resume()
         }
-    }
-
-    private fun setRunningState(value: Boolean) {
-        if (isRunning == value) {
-            refreshToolbarState()
-            return
-        }
-
-        isRunning = value
-        setTargetTouchable(!value)
-        refreshToolbarState()
-        notifyOverlayStateChanged()
     }
 
     private fun notifyOverlayStateChanged() {
-        onOverlayStateChanged(isShowing, isRunning)
+        onOverlayStateChanged(snapshot)
     }
 
     private fun overlayParams(width: Int, height: Int, x: Int, y: Int): WindowManager.LayoutParams {
