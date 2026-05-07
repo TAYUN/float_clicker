@@ -11,15 +11,21 @@ void main() {
   final methodCalls = <MethodCall>[];
   var nativeOverlayEnabled = false;
   var nativeTaskRunState = 'idle';
+  var nativeExecutedCount = 0;
 
-  Future<void> sendSinglePointClickingState(String taskRunState) async {
+  Future<void> sendSinglePointClickingState(
+    String taskRunState, {
+    int executedCount = 0,
+  }) async {
     nativeTaskRunState = taskRunState;
+    nativeExecutedCount = executedCount;
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage(
           permissionChannel.name,
           methodCodec.encodeMethodCall(
             MethodCall('singlePointClickingStateChanged', {
               'taskRunState': taskRunState,
+              'executedCount': executedCount,
             }),
           ),
           (_) {},
@@ -29,9 +35,11 @@ void main() {
   Future<void> sendSinglePointOverlayState({
     required bool isEnabled,
     required String taskRunState,
+    int executedCount = 0,
   }) async {
     nativeOverlayEnabled = isEnabled;
     nativeTaskRunState = taskRunState;
+    nativeExecutedCount = executedCount;
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage(
           permissionChannel.name,
@@ -39,6 +47,7 @@ void main() {
             MethodCall('singlePointOverlayStateChanged', {
               'isEnabled': isEnabled,
               'taskRunState': taskRunState,
+              'executedCount': executedCount,
             }),
           ),
           (_) {},
@@ -65,6 +74,7 @@ void main() {
     methodCalls.clear();
     nativeOverlayEnabled = false;
     nativeTaskRunState = 'idle';
+    nativeExecutedCount = 0;
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(permissionChannel, (call) async {
@@ -76,16 +86,19 @@ void main() {
             return {
               'isEnabled': nativeOverlayEnabled,
               'taskRunState': nativeTaskRunState,
+              'executedCount': nativeExecutedCount,
             };
           }
           if (call.method == 'showSinglePointOverlay') {
             nativeOverlayEnabled = true;
             nativeTaskRunState = 'idle';
+            nativeExecutedCount = 0;
             return null;
           }
           if (call.method == 'hideSinglePointOverlay') {
             nativeOverlayEnabled = false;
             nativeTaskRunState = 'idle';
+            nativeExecutedCount = 0;
             return null;
           }
           if (call.method == 'startSinglePointClicking') {
@@ -102,10 +115,12 @@ void main() {
           }
           if (call.method == 'endSinglePointClicking') {
             nativeTaskRunState = 'idle';
+            nativeExecutedCount = 0;
             return null;
           }
           if (call.method == 'stopSinglePointClicking') {
             nativeTaskRunState = 'idle';
+            nativeExecutedCount = 0;
             return null;
           }
           return null;
@@ -311,6 +326,41 @@ void main() {
     expect(find.text('已暂停'), findsOneWidget);
     expect(find.text('继续任务'), findsOneWidget);
     expect(find.text('Android 尚未实现 pauseSinglePointClicking。'), findsNothing);
+  });
+
+  testWidgets('Single point page displays native executed count', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tester.tap(find.text('单点模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开启单点模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('执行任务'));
+    await tester.pumpAndSettle();
+
+    await sendSinglePointClickingState('running', executedCount: 3);
+    await tester.pump();
+
+    expect(find.text('已执行 3 / 10 次'), findsOneWidget);
+
+    await tester.tap(find.text('暂停任务'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('已执行 3 / 10 次'), findsOneWidget);
+  });
+
+  testWidgets('Home displays native running progress snapshot', (tester) async {
+    nativeOverlayEnabled = true;
+    nativeTaskRunState = 'running';
+    nativeExecutedCount = 4;
+
+    await tester.pumpWidget(const FloatClickerApp());
+    await tester.pumpAndSettle();
+
+    expect(find.text('单点任务执行中'), findsOneWidget);
+    expect(find.text('已执行 4 次'), findsOneWidget);
   });
 
   testWidgets('Leaving mode page keeps native single point overlay enabled', (

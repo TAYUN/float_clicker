@@ -137,6 +137,11 @@ class _RunStateCard extends StatelessWidget {
       (true, TaskRunState.paused) => '单点任务已暂停',
       (true, TaskRunState.idle) => '单点模式已开启',
     };
+    final subtitle = switch ((snapshot.isEnabled, snapshot.taskRunState)) {
+      (true, TaskRunState.running) ||
+      (true, TaskRunState.paused) => '已执行 ${snapshot.executedCount} 次',
+      _ => null,
+    };
 
     return Card(
       child: Padding(
@@ -151,7 +156,19 @@ class _RunStateCard extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleSmall),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
         ),

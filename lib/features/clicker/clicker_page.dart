@@ -85,6 +85,7 @@ class _ClickerPageState extends State<ClickerPage> {
     _controller.setSinglePointModeState(
       isEnabled: overlaySnapshot.isEnabled,
       taskRunState: overlaySnapshot.taskRunState,
+      executedCount: overlaySnapshot.executedCount,
     );
     setState(() {
       _isLoadingSettings = false;
@@ -164,6 +165,7 @@ class _ClickerPageState extends State<ClickerPage> {
     _controller.setSinglePointModeState(
       isEnabled: snapshot.isEnabled,
       taskRunState: snapshot.taskRunState,
+      executedCount: snapshot.executedCount,
     );
   }
 
@@ -223,6 +225,8 @@ class _ClickerPageState extends State<ClickerPage> {
                       _StatusPanel(
                         isEnabled: _controller.isSinglePointModeEnabled,
                         taskRunState: _controller.taskRunState,
+                        executedCount: _controller.executedCount,
+                        settings: settings,
                       ),
                       const SizedBox(height: 16),
                       Card(
@@ -284,10 +288,17 @@ class _ClickerPageState extends State<ClickerPage> {
 }
 
 class _StatusPanel extends StatelessWidget {
-  const _StatusPanel({required this.isEnabled, required this.taskRunState});
+  const _StatusPanel({
+    required this.isEnabled,
+    required this.taskRunState,
+    required this.executedCount,
+    required this.settings,
+  });
 
   final bool isEnabled;
   final TaskRunState taskRunState;
+  final int executedCount;
+  final ClickerSettings settings;
 
   @override
   Widget build(BuildContext context) {
@@ -301,9 +312,12 @@ class _StatusPanel extends StatelessWidget {
     final subtitle = switch ((isEnabled, taskRunState)) {
       (false, _) => '开启后将显示悬浮组件和一个可拖动点击点',
       (true, TaskRunState.running) => '任务正在执行，点击点移动后下一次点击会使用新位置',
-      (true, TaskRunState.paused) => '任务已暂停，后续原生阶段会保留本轮进度继续执行',
+      (true, TaskRunState.paused) => '任务已暂停，继续后会从当前进度执行',
       (true, TaskRunState.idle) => '悬浮组件已显示，可以开始点击任务',
     };
+    final progressLabel = isEnabled && taskRunState != TaskRunState.idle
+        ? _progressLabel(settings, executedCount)
+        : null;
 
     return Card(
       child: Padding(
@@ -322,6 +336,13 @@ class _StatusPanel extends StatelessWidget {
                   Text(title, style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 4),
                   Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                  if (progressLabel != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      progressLabel,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -329,6 +350,14 @@ class _StatusPanel extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _progressLabel(ClickerSettings settings, int executedCount) {
+    if (settings.infiniteLoop) {
+      return '已执行 $executedCount 次';
+    }
+
+    return '已执行 $executedCount / ${settings.repeatCount} 次';
   }
 }
 

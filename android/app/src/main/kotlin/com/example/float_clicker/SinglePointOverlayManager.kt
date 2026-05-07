@@ -26,7 +26,13 @@ class SinglePointOverlayManager(
     private var targetView: View? = null
     private var targetParams: WindowManager.LayoutParams? = null
     private var toolbarView: LinearLayout? = null
+    private var toolbarParams: WindowManager.LayoutParams? = null
+    private var collapsedToolbarView: TextView? = null
+    private var collapsedToolbarParams: WindowManager.LayoutParams? = null
+    private var actionButtonView: TextView? = null
+    private var actionButtonParams: WindowManager.LayoutParams? = null
     private var taskStatus = SinglePointTaskStatus()
+    private var interactionState = OverlayInteractionState()
 
     // 当前配置保存在 overlay 管理器中。真正开始点击时会打包成 SinglePointClickRequest。
     private var intervalMs = 500
@@ -45,27 +51,29 @@ class SinglePointOverlayManager(
     fun show(settings: SinglePointOverlaySettings = SinglePointOverlaySettings()) {
         updateSettings(settings)
 
-        if (targetView != null || toolbarView != null) {
+        if (targetView != null) {
             // 已经显示时不重复 addView，避免 WindowManager 报 view already has parent。
+            refreshInteractionViews()
             return
         }
 
         val target = createTargetView()
-        val toolbar = createToolbarView()
-        val nextTargetParams = overlayParams(width = dp(38), height = dp(38), x = dp(280), y = dp(260))
-        val toolbarParams = overlayParams(width = dp(52), height = WindowManager.LayoutParams.WRAP_CONTENT, x = dp(18), y = dp(180))
+        val nextTargetParams = overlayParams(
+            width = dp(38),
+            height = dp(38),
+            x = dpPosition(interactionState.targetPosition.x),
+            y = dpPosition(interactionState.targetPosition.y),
+        )
 
-        // 点击点整体可拖动；工具条只让第一个“移动”按钮负责拖动。
-        bindDrag(target, nextTargetParams)
-        bindDrag(toolbar.getChildAt(0), toolbarParams)
+        bindDrag(target, nextTargetParams) { point ->
+            interactionState = interactionState.copy(targetPosition = point)
+        }
 
         windowManager.addView(target, nextTargetParams)
-        windowManager.addView(toolbar, toolbarParams)
 
         targetView = target
         targetParams = nextTargetParams
-        toolbarView = toolbar
-        refreshToolbarState()
+        refreshInteractionViews()
         notifyOverlayStateChanged()
     }
 
@@ -75,15 +83,37 @@ class SinglePointOverlayManager(
         repeatCount = settings.repeatCount.coerceAtLeast(1)
         infiniteLoop = settings.infiniteLoop
         tapDurationMs = settings.tapDurationMs.coerceAtLeast(1)
+        interactionState = settings.interactionState
+        refreshInteractionViews()
+    }
+
+    fun updateClickSettings(settings: SinglePointOverlaySettings) {
+        // 设置页可能只更新点击参数；交互位置和当前模式不能因此回到默认值。
+        intervalMs = settings.intervalMs.coerceAtLeast(50)
+        repeatCount = settings.repeatCount.coerceAtLeast(1)
+        infiniteLoop = settings.infiniteLoop
+        tapDurationMs = settings.tapDurationMs.coerceAtLeast(1)
+    }
+
+    fun updateInteractionState(state: OverlayInteractionState) {
+        interactionState = state
+        refreshInteractionViews()
     }
 
     fun hide() {
         end()
         removeView(targetView)
         removeView(toolbarView)
+        removeView(collapsedToolbarView)
+        removeView(actionButtonView)
         targetView = null
         targetParams = null
         toolbarView = null
+        toolbarParams = null
+        collapsedToolbarView = null
+        collapsedToolbarParams = null
+        actionButtonView = null
+        actionButtonParams = null
         notifyOverlayStateChanged()
     }
 
@@ -182,6 +212,36 @@ class SinglePointOverlayManager(
         }
     }
 
+    private fun createCollapsedToolbarView(): TextView {
+        return floatingButton("≡", textSize = 24f) {
+            interactionState = interactionState.copy(isToolbarCollapsed = false)
+            refreshInteractionViews()
+        }
+    }
+
+    private fun createActionButtonView(): TextView {
+        return floatingButton("▶", textSize = 24f) { toggleTaskRunState() }
+    }
+
+    private fun floatingButton(text: String, textSize: Float, onClick: () -> Unit): TextView {
+        val background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Color.argb(236, 36, 39, 43))
+        }
+
+        return TextView(context).apply {
+            this.text = text
+            this.textSize = textSize
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            this.background = background
+            elevation = dp(8).toFloat()
+            isClickable = true
+            setOnClickListener { onClick() }
+        }
+    }
+
     private fun toolbarButton(text: String, textSize: Float, onClick: (() -> Unit)?): TextView {
         return TextView(context).apply {
             this.text = text
@@ -216,6 +276,22 @@ class SinglePointOverlayManager(
                 TaskRunState.PAUSED -> "继续点击"
             }
         }
+        refreshActionButtonState()
+    }
+
+    private fun refreshActionButtonState() {
+        actionButtonView?.apply {
+            text = when (taskStatus.taskRunState) {
+                TaskRunState.IDLE -> "▶"
+                TaskRunState.RUNNING -> "Ⅱ"
+                TaskRunState.PAUSED -> "▶"
+            }
+            contentDescription = when (taskStatus.taskRunState) {
+                TaskRunState.IDLE -> "开始点击"
+                TaskRunState.RUNNING -> "暂停点击"
+                TaskRunState.PAUSED -> "继续点击"
+            }
+        }
     }
 
     private fun toggleTaskRunState() {
@@ -228,6 +304,146 @@ class SinglePointOverlayManager(
 
     private fun notifyOverlayStateChanged() {
         onOverlayStateChanged(snapshot)
+    }
+
+    private fun refreshInteractionViews() {
+        val target = targetView ?: return
+        if (target.parent == null) {
+            return
+        }
+
+        syncTargetPosition()
+        syncToolbarVisibility()
+        syncCollapsedToolbarVisibility()
+        syncActionButtonVisibility()
+        refreshToolbarState()
+        refreshActionButtonState()
+        notifyOverlayStateChanged()
+    }
+
+    private fun syncTargetPosition() {
+        val params = targetParams ?: return
+        params.x = dpPosition(interactionState.targetPosition.x)
+        params.y = dpPosition(interactionState.targetPosition.y)
+        targetView?.let { windowManager.updateViewLayout(it, params) }
+    }
+
+    private fun syncToolbarVisibility() {
+        if (interactionState.shouldShowToolbar()) {
+            ensureToolbarView()
+            moveToolbarToConfiguredPosition()
+        } else {
+            removeView(toolbarView)
+            toolbarView = null
+            toolbarParams = null
+        }
+    }
+
+    private fun ensureToolbarView() {
+        if (toolbarView != null) {
+            return
+        }
+
+        val toolbar = createToolbarView()
+        val params = overlayParams(
+            width = dp(52),
+            height = WindowManager.LayoutParams.WRAP_CONTENT,
+            x = dpPosition(interactionState.toolbarPosition.x),
+            y = dpPosition(interactionState.toolbarPosition.y),
+        )
+        // 工具条只让第一个“移动”按钮负责拖动，避免运行/关闭按钮拦截整条工具条的移动手势。
+        bindDrag(toolbar.getChildAt(0), params) { point ->
+            interactionState = interactionState.copy(toolbarPosition = point)
+        }
+        windowManager.addView(toolbar, params)
+        toolbarView = toolbar
+        toolbarParams = params
+    }
+
+    private fun syncCollapsedToolbarVisibility() {
+        if (interactionState.shouldShowCollapsedToolbar()) {
+            ensureCollapsedToolbarView()
+            moveCollapsedToolbarToConfiguredPosition()
+        } else {
+            removeView(collapsedToolbarView)
+            collapsedToolbarView = null
+            collapsedToolbarParams = null
+        }
+    }
+
+    private fun ensureCollapsedToolbarView() {
+        if (collapsedToolbarView != null) {
+            return
+        }
+
+        val collapsed = createCollapsedToolbarView()
+        val params = overlayParams(
+            width = dp(44),
+            height = dp(44),
+            x = dpPosition(interactionState.collapsedToolbarPosition.x),
+            y = dpPosition(interactionState.collapsedToolbarPosition.y),
+        )
+        bindDrag(collapsed, params) { point ->
+            interactionState = interactionState.copy(collapsedToolbarPosition = point)
+        }
+        windowManager.addView(collapsed, params)
+        collapsedToolbarView = collapsed
+        collapsedToolbarParams = params
+    }
+
+    private fun syncActionButtonVisibility() {
+        if (interactionState.shouldShowActionButton()) {
+            ensureActionButtonView()
+            moveActionButtonToConfiguredPosition()
+        } else {
+            removeView(actionButtonView)
+            actionButtonView = null
+            actionButtonParams = null
+        }
+    }
+
+    private fun ensureActionButtonView() {
+        if (actionButtonView != null) {
+            return
+        }
+
+        val actionButton = createActionButtonView()
+        val params = overlayParams(
+            width = dp(52),
+            height = dp(52),
+            x = dpPosition(interactionState.actionButtonPosition.x),
+            y = dpPosition(interactionState.actionButtonPosition.y),
+        )
+        bindDrag(actionButton, params) { point ->
+            interactionState = interactionState.copy(actionButtonPosition = point)
+        }
+        windowManager.addView(actionButton, params)
+        actionButtonView = actionButton
+        actionButtonParams = params
+    }
+
+    private fun moveToolbarToConfiguredPosition() {
+        val view = toolbarView ?: return
+        val params = toolbarParams ?: return
+        params.x = dpPosition(interactionState.toolbarPosition.x)
+        params.y = dpPosition(interactionState.toolbarPosition.y)
+        windowManager.updateViewLayout(view, params)
+    }
+
+    private fun moveCollapsedToolbarToConfiguredPosition() {
+        val view = collapsedToolbarView ?: return
+        val params = collapsedToolbarParams ?: return
+        params.x = dpPosition(interactionState.collapsedToolbarPosition.x)
+        params.y = dpPosition(interactionState.collapsedToolbarPosition.y)
+        windowManager.updateViewLayout(view, params)
+    }
+
+    private fun moveActionButtonToConfiguredPosition() {
+        val view = actionButtonView ?: return
+        val params = actionButtonParams ?: return
+        params.x = dpPosition(interactionState.actionButtonPosition.x)
+        params.y = dpPosition(interactionState.actionButtonPosition.y)
+        windowManager.updateViewLayout(view, params)
     }
 
     private fun overlayParams(width: Int, height: Int, x: Int, y: Int): WindowManager.LayoutParams {
@@ -274,7 +490,11 @@ class SinglePointOverlayManager(
         )
     }
 
-    private fun bindDrag(view: View, params: WindowManager.LayoutParams) {
+    private fun bindDrag(
+        view: View,
+        params: WindowManager.LayoutParams,
+        onPositionChanged: (OverlayPoint) -> Unit = {},
+    ) {
         var startRawX = 0f
         var startRawY = 0f
         var startX = 0
@@ -306,6 +526,8 @@ class SinglePointOverlayManager(
                 MotionEvent.ACTION_UP -> {
                     if (!moved) {
                         touchedView.performClick()
+                    } else {
+                        onPositionChanged(OverlayPoint(x = logicalPosition(params.x), y = logicalPosition(params.y)))
                     }
                     true
                 }
@@ -327,6 +549,17 @@ class SinglePointOverlayManager(
     private fun dp(value: Int): Int {
         return (value * context.resources.displayMetrics.density).roundToInt()
     }
+
+    private fun dpPosition(value: Int): Int {
+        // Flutter 持久化的是逻辑像素；WindowManager 需要真实屏幕像素。
+        // 先在原生边界统一转换，后续位置回传时也应在同一处做反向转换。
+        return dp(value)
+    }
+
+    private fun logicalPosition(value: Int): Int {
+        val density = context.resources.displayMetrics.density
+        return (value / density).roundToInt()
+    }
 }
 
 data class SinglePointOverlaySettings(
@@ -334,4 +567,5 @@ data class SinglePointOverlaySettings(
     val repeatCount: Int = 10,
     val infiniteLoop: Boolean = false,
     val tapDurationMs: Int = 50,
+    val interactionState: OverlayInteractionState = OverlayInteractionState(),
 )

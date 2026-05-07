@@ -49,7 +49,7 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "updateSinglePointSettings" -> {
-                    singlePointOverlayManager.updateSettings(singlePointOverlaySettingsFrom(call.arguments))
+                    singlePointOverlayManager.updateClickSettings(singlePointOverlaySettingsFrom(call.arguments))
                     result.success(null)
                 }
                 "hideSinglePointOverlay" -> {
@@ -94,7 +94,7 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "updateSinglePointOverlayUiSettings" -> {
-                    // 悬浮组件拆分阶段会消费完整交互配置；三态调度阶段先接住协议，避免 Flutter 侧报未实现。
+                    singlePointOverlayManager.updateInteractionState(overlayInteractionStateFrom(call.arguments))
                     result.success(null)
                 }
                 else -> result.notImplemented()
@@ -124,6 +124,41 @@ class MainActivity : FlutterActivity() {
             repeatCount = (map["repeatCount"] as? Number)?.toInt() ?: 10,
             infiniteLoop = map["infiniteLoop"] as? Boolean ?: false,
             tapDurationMs = (map["tapDurationMs"] as? Number)?.toInt() ?: 50,
+            interactionState = overlayInteractionStateFrom(arguments),
+        )
+    }
+
+    private fun overlayInteractionStateFrom(arguments: Any?): OverlayInteractionState {
+        val map = arguments as? Map<*, *> ?: return OverlayInteractionState()
+        return OverlayInteractionState(
+            interactionMode = OverlayInteractionMode.fromWireName(map["interactionMode"] as? String),
+            targetPosition = overlayPointFrom(map, "targetPositionX", "targetPositionY", OverlayPoint(280, 260)),
+            toolbarPosition = overlayPointFrom(map, "toolbarPositionX", "toolbarPositionY", OverlayPoint(18, 180)),
+            collapsedToolbarPosition = overlayPointFrom(
+                map,
+                "collapsedToolbarPositionX",
+                "collapsedToolbarPositionY",
+                OverlayPoint(18, 180),
+            ),
+            actionButtonPosition = overlayPointFrom(
+                map,
+                "actionButtonPositionX",
+                "actionButtonPositionY",
+                OverlayPoint(18, 260),
+            ),
+            isToolbarCollapsed = map["isToolbarCollapsed"] as? Boolean ?: false,
+        )
+    }
+
+    private fun overlayPointFrom(
+        map: Map<*, *>,
+        xKey: String,
+        yKey: String,
+        fallback: OverlayPoint,
+    ): OverlayPoint {
+        return OverlayPoint(
+            x = (map[xKey] as? Number)?.toInt() ?: fallback.x,
+            y = (map[yKey] as? Number)?.toInt() ?: fallback.y,
         )
     }
 
