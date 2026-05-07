@@ -76,12 +76,14 @@ class SinglePointOverlayManager(
 
     fun show(settings: SinglePointOverlaySettings = SinglePointOverlaySettings()) {
         applySettings(settings)
+        coerceInteractionStateToScreen()
         targetComponent.show(interactionState.targetPosition)
         refreshInteractionViews()
     }
 
     fun updateSettings(settings: SinglePointOverlaySettings) {
         applySettings(settings)
+        coerceInteractionStateToScreen()
         refreshInteractionViews()
     }
 
@@ -95,6 +97,7 @@ class SinglePointOverlayManager(
 
     fun updateInteractionState(state: OverlayInteractionState) {
         interactionState = state
+        coerceInteractionStateToScreen()
         refreshInteractionViews()
     }
 
@@ -173,6 +176,7 @@ class SinglePointOverlayManager(
             return
         }
 
+        coerceInteractionStateToScreen()
         targetComponent.moveTo(interactionState.targetPosition)
 
         if (interactionState.shouldShowToolbar()) {
@@ -204,6 +208,28 @@ class SinglePointOverlayManager(
     private fun refreshTaskActionState() {
         toolbarComponent.updateTaskRunState(taskStatus.taskRunState)
         actionButtonComponent.updateTaskRunState(taskStatus.taskRunState)
+    }
+
+    private fun coerceInteractionStateToScreen() {
+        val coercedState = interactionState.copy(
+            targetPosition = overlay.coercePosition(interactionState.targetPosition, widthDp = 38, heightDp = 38),
+            toolbarPosition = overlay.coercePosition(interactionState.toolbarPosition, widthDp = 52, heightDp = 148),
+            collapsedToolbarPosition = overlay.coercePosition(
+                interactionState.collapsedToolbarPosition,
+                widthDp = 44,
+                heightDp = 44,
+            ),
+            actionButtonPosition = overlay.coercePosition(
+                interactionState.actionButtonPosition,
+                widthDp = 52,
+                heightDp = 52,
+            ),
+        )
+
+        if (coercedState != interactionState) {
+            // 横竖屏切换或历史配置越界时，原生侧先校正，再通过 snapshot 回传给 Flutter 持久化。
+            interactionState = coercedState
+        }
     }
 
     private fun toggleTaskRunState() {

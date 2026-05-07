@@ -73,6 +73,19 @@ internal class OverlayWindowHelper(
         updateViewLayout(view, params)
     }
 
+    fun coercePosition(position: OverlayPoint, widthDp: Int, heightDp: Int): OverlayPoint {
+        val metrics = context.resources.displayMetrics
+        val screenWidthDp = logicalPosition(metrics.widthPixels)
+        val screenHeightDp = logicalPosition(metrics.heightPixels)
+        val maxX = (screenWidthDp - widthDp).coerceAtLeast(0)
+        val maxY = (screenHeightDp - heightDp).coerceAtLeast(0)
+
+        return OverlayPoint(
+            x = position.x.coerceIn(0, maxX),
+            y = position.y.coerceIn(0, maxY),
+        )
+    }
+
     fun bindDrag(
         view: View,
         params: WindowManager.LayoutParams,
