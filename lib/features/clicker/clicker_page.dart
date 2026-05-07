@@ -17,17 +17,22 @@ class ClickerPage extends StatefulWidget {
   State<ClickerPage> createState() => _ClickerPageState();
 }
 
-class _ClickerPageState extends State<ClickerPage> {
+class _ClickerPageState extends State<ClickerPage> with WidgetsBindingObserver {
   late final ClickerController _controller;
   final AndroidPermissionService _permissionService =
       AndroidPermissionService();
   final ClickerSettingsStore _settingsStore = const ClickerSettingsStore();
+  AndroidPermissionSnapshot _permissionSnapshot =
+      AndroidPermissionSnapshot.unsupported;
+  bool _hasPermissionSnapshot = false;
   bool _isLoadingSettings = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = ClickerController();
+    _permissionService.setPermissionStateChanged(_handlePermissionChanged);
     _permissionService.setSinglePointOverlayStateChanged(
       _handleSinglePointOverlayStateChanged,
     );
@@ -37,9 +42,19 @@ class _ClickerPageState extends State<ClickerPage> {
   @override
   void dispose() {
     // 页面离开时只解绑回调；悬浮窗由用户通过控制条或“关闭单点模式”按钮主动关闭。
+    _permissionService.setPermissionStateChanged(null);
     _permissionService.setSinglePointOverlayStateChanged(null);
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // 从系统设置或其他 App 回到页面时，权限和悬浮窗可能已由原生侧收尾。
+      _refreshNativeState(reportPermissionChanges: true);
+    }
   }
 
   Future<void> _toggleSinglePointMode() async {
@@ -68,22 +83,63 @@ class _ClickerPageState extends State<ClickerPage> {
 
   Future<void> _loadSavedSettings() async {
     final settings = await _settingsStore.loadSinglePointSettings();
+    final permissionSnapshot = await _permissionService.getSnapshot();
     final overlaySnapshot = await _permissionService
         .getSinglePointOverlaySnapshot();
     if (!mounted) {
       return;
     }
 
+    _applyPermissionSnapshot(permissionSnapshot, reportChanges: false);
     _controller.updateSinglePointSettings(settings);
-    await _applyOverlayUiSettingsFromSnapshot(overlaySnapshot);
-    _controller.setSinglePointModeState(
-      isEnabled: overlaySnapshot.isEnabled,
-      taskRunState: overlaySnapshot.taskRunState,
-      executedCount: overlaySnapshot.executedCount,
-    );
+    if (!permissionSnapshot.overlayGranted) {
+      _controller.setSinglePointModeState(isEnabled: false);
+    } else {
+      await _applyOverlayUiSettingsFromSnapshot(overlaySnapshot);
+      _controller.setSinglePointModeState(
+        isEnabled: overlaySnapshot.isEnabled,
+        taskRunState: permissionSnapshot.accessibilityConnected
+            ? overlaySnapshot.taskRunState
+            : TaskRunState.idle,
+        executedCount: permissionSnapshot.accessibilityConnected
+            ? overlaySnapshot.executedCount
+            : 0,
+      );
+    }
     setState(() {
       _isLoadingSettings = false;
     });
+  }
+
+  Future<void> _refreshNativeState({
+    required bool reportPermissionChanges,
+  }) async {
+    final permissionSnapshot = await _permissionService.getSnapshot();
+    final overlaySnapshot = await _permissionService
+        .getSinglePointOverlaySnapshot();
+    if (!mounted) {
+      return;
+    }
+
+    _applyPermissionSnapshot(
+      permissionSnapshot,
+      reportChanges: reportPermissionChanges,
+    );
+    if (!permissionSnapshot.overlayGranted) {
+      _controller.setSinglePointModeState(isEnabled: false);
+      return;
+    }
+
+    await _applyOverlayUiSettingsFromSnapshot(overlaySnapshot);
+    _controller.setSinglePointModeState(
+      isEnabled: overlaySnapshot.isEnabled,
+      taskRunState: permissionSnapshot.accessibilityConnected
+          ? overlaySnapshot.taskRunState
+          : TaskRunState.idle,
+      executedCount: permissionSnapshot.accessibilityConnected
+          ? overlaySnapshot.executedCount
+          : 0,
+    );
   }
 
   Future<void> _startClicking() async {
@@ -165,6 +221,41 @@ class _ClickerPageState extends State<ClickerPage> {
     );
   }
 
+  void _handlePermissionChanged(AndroidPermissionSnapshot snapshot) {
+    if (!mounted) {
+      return;
+    }
+
+    _applyPermissionSnapshot(snapshot, reportChanges: true);
+  }
+
+  void _applyPermissionSnapshot(
+    AndroidPermissionSnapshot snapshot, {
+    required bool reportChanges,
+  }) {
+    final previousSnapshot = _permissionSnapshot;
+    final hadPermissionSnapshot = _hasPermissionSnapshot;
+    _permissionSnapshot = snapshot;
+    _hasPermissionSnapshot = true;
+
+    if (!reportChanges || !hadPermissionSnapshot) {
+      return;
+    }
+
+    if (previousSnapshot.overlayGranted && !snapshot.overlayGranted) {
+      _controller.setSinglePointModeState(isEnabled: false);
+      _showMessage('悬浮窗权限已关闭，单点模式已退出。');
+      return;
+    }
+
+    if (previousSnapshot.accessibilityConnected &&
+        !snapshot.accessibilityConnected &&
+        _controller.taskRunState != TaskRunState.idle) {
+      _controller.setTaskRunState(TaskRunState.idle, executedCount: 0);
+      _showMessage('无障碍服务已断开，点击任务已结束。');
+    }
+  }
+
   Future<void> _applyOverlayUiSettingsFromSnapshot(
     SinglePointOverlaySnapshot snapshot,
   ) async {
@@ -213,6 +304,16 @@ class _ClickerPageState extends State<ClickerPage> {
       infiniteLoop: settings.infiniteLoop,
       tapDurationMs: settings.tapDurationMs,
     );
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override

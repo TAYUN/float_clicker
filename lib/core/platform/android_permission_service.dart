@@ -108,11 +108,15 @@ OverlayUiSettings? _overlayUiSettingsFromMap(Map<Object?, Object?> map) {
 
 class AndroidPermissionService {
   AndroidPermissionService({MethodChannel? channel})
-    : _channel = channel ?? const MethodChannel(_channelName);
+    : _channel = channel ?? _defaultChannel {
+    _ensureMethodCallHandler(_channel);
+  }
 
   static const _channelName = 'float_clicker/android_permissions';
+  static const _defaultChannel = MethodChannel(_channelName);
 
   final MethodChannel _channel;
+  final Object _listenerKey = Object();
 
   Future<AndroidPermissionSnapshot> getSnapshot() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
@@ -229,13 +233,19 @@ class AndroidPermissionService {
   void setSinglePointOverlayStateChanged(
     SinglePointOverlayStateChanged? onChanged,
   ) {
-    _singlePointOverlayStateChanged = onChanged;
-    _updateMethodCallHandler();
+    if (onChanged == null) {
+      _singlePointOverlayListeners.remove(_listenerKey);
+    } else {
+      _singlePointOverlayListeners[_listenerKey] = onChanged;
+    }
   }
 
   void setPermissionStateChanged(AndroidPermissionStateChanged? onChanged) {
-    _permissionStateChanged = onChanged;
-    _updateMethodCallHandler();
+    if (onChanged == null) {
+      _permissionStateListeners.remove(_listenerKey);
+    } else {
+      _permissionStateListeners[_listenerKey] = onChanged;
+    }
   }
 
   Future<void> _invokeAndroidOnly(
@@ -277,49 +287,56 @@ class AndroidPermissionService {
     };
   }
 
-  SinglePointOverlayStateChanged? _singlePointOverlayStateChanged;
-  AndroidPermissionStateChanged? _permissionStateChanged;
+  static final Map<Object, SinglePointOverlayStateChanged>
+  _singlePointOverlayListeners = {};
+  static final Map<Object, AndroidPermissionStateChanged>
+  _permissionStateListeners = {};
 
-  void _updateMethodCallHandler() {
-    if (_singlePointOverlayStateChanged == null &&
-        _permissionStateChanged == null) {
-      _channel.setMethodCallHandler(null);
-      return;
-    }
-
-    _channel.setMethodCallHandler((call) async {
+  static void _ensureMethodCallHandler(MethodChannel channel) {
+    // MethodChannel 的 Flutter 侧 handler 是按 channel 名称全局生效的；
+    // 这里集中分发，避免首页和单点页分别注册时互相覆盖。
+    channel.setMethodCallHandler((call) async {
       final arguments = call.arguments;
       if (arguments is! Map<Object?, Object?>) {
         return;
       }
 
       if (call.method == 'permissionSnapshotChanged') {
-        await _permissionStateChanged?.call(
-          AndroidPermissionSnapshot.fromMap(arguments),
-        );
+        final snapshot = AndroidPermissionSnapshot.fromMap(arguments);
+        for (final listener in List<AndroidPermissionStateChanged>.of(
+          _permissionStateListeners.values,
+        )) {
+          await listener(snapshot);
+        }
         return;
       }
 
       if (call.method == 'singlePointOverlayStateChanged') {
-        await _singlePointOverlayStateChanged?.call(
-          SinglePointOverlaySnapshot.fromMap(arguments),
-        );
+        final snapshot = SinglePointOverlaySnapshot.fromMap(arguments);
+        for (final listener in List<SinglePointOverlayStateChanged>.of(
+          _singlePointOverlayListeners.values,
+        )) {
+          await listener(snapshot);
+        }
         return;
       }
 
       if (call.method == 'singlePointClickingStateChanged') {
-        await _singlePointOverlayStateChanged?.call(
-          SinglePointOverlaySnapshot(
-            isEnabled: true,
-            taskRunState: arguments['taskRunState'] is String
-                ? TaskRunState.fromName(arguments['taskRunState'] as String?)
-                : (arguments['isRunning'] == true
-                      ? TaskRunState.running
-                      : TaskRunState.idle),
-            executedCount: (arguments['executedCount'] as num?)?.toInt() ?? 0,
-            overlayUiSettings: _overlayUiSettingsFromMap(arguments),
-          ),
+        final snapshot = SinglePointOverlaySnapshot(
+          isEnabled: true,
+          taskRunState: arguments['taskRunState'] is String
+              ? TaskRunState.fromName(arguments['taskRunState'] as String?)
+              : (arguments['isRunning'] == true
+                    ? TaskRunState.running
+                    : TaskRunState.idle),
+          executedCount: (arguments['executedCount'] as num?)?.toInt() ?? 0,
+          overlayUiSettings: _overlayUiSettingsFromMap(arguments),
         );
+        for (final listener in List<SinglePointOverlayStateChanged>.of(
+          _singlePointOverlayListeners.values,
+        )) {
+          await listener(snapshot);
+        }
         return;
       }
 

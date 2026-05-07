@@ -13,6 +13,9 @@ void main() {
   var nativeTaskRunState = 'idle';
   var nativeExecutedCount = 0;
   var nativeOverlaySettings = <String, Object?>{};
+  var nativeAccessibilityGranted = false;
+  var nativeAccessibilityConnected = false;
+  var nativeOverlayGranted = true;
   PlatformException? nativeStartFailure;
 
   Future<void> sendSinglePointClickingState(
@@ -58,6 +61,28 @@ void main() {
         );
   }
 
+  Future<void> sendPermissionSnapshot({
+    required bool accessibilityGranted,
+    required bool accessibilityConnected,
+    required bool overlayGranted,
+  }) async {
+    nativeAccessibilityGranted = accessibilityGranted;
+    nativeAccessibilityConnected = accessibilityConnected;
+    nativeOverlayGranted = overlayGranted;
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          permissionChannel.name,
+          methodCodec.encodeMethodCall(
+            MethodCall('permissionSnapshotChanged', {
+              'accessibilityGranted': accessibilityGranted,
+              'accessibilityConnected': accessibilityConnected,
+              'overlayGranted': overlayGranted,
+            }),
+          ),
+          (_) {},
+        );
+  }
+
   Future<void> scrollDown(WidgetTester tester) async {
     await tester.drag(find.byType(Scrollable).last, const Offset(0, -420));
     await tester.pumpAndSettle();
@@ -80,6 +105,9 @@ void main() {
     nativeTaskRunState = 'idle';
     nativeExecutedCount = 0;
     nativeOverlaySettings = _defaultNativeOverlaySettings();
+    nativeAccessibilityGranted = false;
+    nativeAccessibilityConnected = false;
+    nativeOverlayGranted = true;
     nativeStartFailure = null;
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -87,9 +115,9 @@ void main() {
           methodCalls.add(call);
           if (call.method == 'getPermissionSnapshot') {
             return {
-              'accessibilityGranted': false,
-              'accessibilityConnected': false,
-              'overlayGranted': true,
+              'accessibilityGranted': nativeAccessibilityGranted,
+              'accessibilityConnected': nativeAccessibilityConnected,
+              'overlayGranted': nativeOverlayGranted,
             };
           }
           if (call.method == 'getSinglePointOverlaySnapshot') {
@@ -408,28 +436,95 @@ void main() {
     expect(find.text('已执行 4 次'), findsOneWidget);
   });
 
+  testWidgets('Home and mode page both receive native overlay events', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tester.tap(find.text('单点模式'));
+    await tester.pumpAndSettle();
+
+    await sendSinglePointOverlayState(
+      isEnabled: true,
+      taskRunState: 'running',
+      executedCount: 5,
+    );
+    await tester.pump();
+
+    expect(find.text('正在点击'), findsOneWidget);
+    expect(find.text('已执行 5 / 10 次'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.text('单点任务执行中'), findsOneWidget);
+    expect(find.text('已执行 5 次'), findsOneWidget);
+  });
+
   testWidgets('Home distinguishes accessibility grant and service connection', (
     tester,
   ) async {
     await tester.pumpWidget(const FloatClickerApp());
     await tester.pumpAndSettle();
 
-    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .handlePlatformMessage(
-          permissionChannel.name,
-          methodCodec.encodeMethodCall(
-            const MethodCall('permissionSnapshotChanged', {
-              'accessibilityGranted': true,
-              'accessibilityConnected': false,
-              'overlayGranted': true,
-            }),
-          ),
-          (_) {},
-        );
+    await sendPermissionSnapshot(
+      accessibilityGranted: true,
+      accessibilityConnected: false,
+      overlayGranted: true,
+    );
     await tester.pump();
 
     expect(find.text('服务未连接'), findsOneWidget);
     expect(find.text('已开启'), findsOneWidget);
+  });
+
+  testWidgets('Single point page exits when overlay permission is revoked', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tester.tap(find.text('单点模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开启单点模式'));
+    await tester.pumpAndSettle();
+
+    await sendPermissionSnapshot(
+      accessibilityGranted: false,
+      accessibilityConnected: false,
+      overlayGranted: false,
+    );
+    await tester.pump();
+
+    expect(find.text('悬浮窗权限已关闭，单点模式已退出。'), findsOneWidget);
+    expect(find.text('未启动'), findsOneWidget);
+    expect(find.text('开启单点模式'), findsOneWidget);
+  });
+
+  testWidgets('Single point page ends task when accessibility disconnects', (
+    tester,
+  ) async {
+    nativeAccessibilityGranted = true;
+    nativeAccessibilityConnected = true;
+
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tester.tap(find.text('单点模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开启单点模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('执行任务'));
+    await tester.pumpAndSettle();
+
+    await sendPermissionSnapshot(
+      accessibilityGranted: true,
+      accessibilityConnected: false,
+      overlayGranted: true,
+    );
+    await tester.pump();
+
+    expect(find.text('无障碍服务已断开，点击任务已结束。'), findsOneWidget);
+    expect(find.text('单点模式已开启'), findsOneWidget);
+    expect(find.text('执行任务'), findsOneWidget);
   });
 
   testWidgets('Native overlay position changes are persisted', (tester) async {

@@ -28,12 +28,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _permissionService.setPermissionStateChanged(_handlePermissionChanged);
+    _permissionService.setSinglePointOverlayStateChanged(
+      _handleSinglePointOverlayChanged,
+    );
     _refreshPermissions();
   }
 
   @override
   void dispose() {
     _permissionService.setPermissionStateChanged(null);
+    _permissionService.setSinglePointOverlayStateChanged(null);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -69,6 +73,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() {
       _permissionSnapshot = snapshot;
       _isLoadingPermissions = false;
+    });
+  }
+
+  void _handleSinglePointOverlayChanged(SinglePointOverlaySnapshot snapshot) {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _singlePointSnapshot = snapshot;
     });
   }
 
