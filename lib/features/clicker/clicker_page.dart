@@ -28,22 +28,24 @@ class _ClickerPageState extends State<ClickerPage> {
   void initState() {
     super.initState();
     _controller = ClickerController();
+    _permissionService.setSinglePointOverlayStateChanged(
+      _handleSinglePointOverlayStateChanged,
+    );
     _loadSavedSettings();
   }
 
   @override
   void dispose() {
-    // 离开单点模式页时主动移除悬浮窗，避免用户返回首页后还残留工具条。
-    _permissionService.hideSinglePointOverlay();
+    // 页面离开时只解绑回调；悬浮窗由用户通过控制条或“关闭单点模式”按钮主动关闭。
+    _permissionService.setSinglePointOverlayStateChanged(null);
     _controller.dispose();
     super.dispose();
   }
 
   Future<void> _toggleSinglePointMode() async {
     try {
-      if (_controller.isSinglePointModeEnabled) {
-        await _permissionService.hideSinglePointOverlay();
-      } else {
+      final shouldEnable = !_controller.isSinglePointModeEnabled;
+      if (shouldEnable) {
         final settings = _controller.settings;
         // 开启模式的核心动作在 Android 侧：
         // Flutter 只把当前配置传过去，Android 负责检查悬浮窗权限并创建目标点/工具条。
@@ -53,9 +55,11 @@ class _ClickerPageState extends State<ClickerPage> {
           infiniteLoop: settings.infiniteLoop,
           tapDurationMs: settings.tapDurationMs,
         );
+      } else {
+        await _permissionService.hideSinglePointOverlay();
       }
       // 只有 MethodChannel 调用成功后才更新 Flutter 状态，避免原生失败时 UI 误显示已开启。
-      _controller.toggleSinglePointMode();
+      _controller.setSinglePointModeState(isEnabled: shouldEnable);
     } on PlatformException catch (error) {
       if (!mounted) {
         return;
@@ -70,11 +74,17 @@ class _ClickerPageState extends State<ClickerPage> {
 
   Future<void> _loadSavedSettings() async {
     final settings = await _settingsStore.load();
+    final overlaySnapshot = await _permissionService
+        .getSinglePointOverlaySnapshot();
     if (!mounted) {
       return;
     }
 
     _controller.updateSettings(settings);
+    _controller.setSinglePointModeState(
+      isEnabled: overlaySnapshot.isEnabled,
+      isRunning: overlaySnapshot.isRunning,
+    );
     setState(() {
       _isLoadingSettings = false;
     });
@@ -82,14 +92,16 @@ class _ClickerPageState extends State<ClickerPage> {
 
   Future<void> _toggleRunning() async {
     try {
-      if (_controller.isRunning) {
-        await _permissionService.stopSinglePointClicking();
-      } else {
+      final shouldRun = !_controller.isRunning;
+      if (shouldRun) {
         // 原生侧会从当前点击点位置读取屏幕坐标，并通过无障碍服务执行 dispatchGesture。
         await _permissionService.startSinglePointClicking();
+      } else {
+        await _permissionService.stopSinglePointClicking();
       }
-      // 和开启模式一样，点击运行态也等原生调用成功后再翻转。
-      _controller.toggleRunning();
+      // 和开启模式一样，点击运行态也等原生调用成功后再更新；
+      // 原生工具条也会回传状态事件，这里显式设置可以避免事件先到时被再次翻转。
+      _controller.setRunning(shouldRun);
     } on PlatformException catch (error) {
       if (!mounted) {
         return;
@@ -99,6 +111,19 @@ class _ClickerPageState extends State<ClickerPage> {
         context,
       ).showSnackBar(SnackBar(content: Text(error.message ?? '无法执行点击')));
     }
+  }
+
+  void _handleSinglePointOverlayStateChanged(
+    SinglePointOverlaySnapshot snapshot,
+  ) {
+    if (!mounted) {
+      return;
+    }
+
+    _controller.setSinglePointModeState(
+      isEnabled: snapshot.isEnabled,
+      isRunning: snapshot.isRunning,
+    );
   }
 
   Future<void> _openSettings() async {

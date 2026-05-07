@@ -11,16 +11,31 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val channelName = "float_clicker/android_permissions"
+    private lateinit var channel: MethodChannel
     private lateinit var singlePointOverlayManager: SinglePointOverlayManager
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        singlePointOverlayManager = SinglePointOverlayManager(this)
+        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
+        singlePointOverlayManager = SinglePointOverlayManager(this) { isEnabled, isRunning ->
+            channel.invokeMethod(
+                "singlePointOverlayStateChanged",
+                singlePointOverlaySnapshot(isEnabled = isEnabled, isRunning = isRunning),
+            )
+        }
 
         // Flutter 侧只负责页面和配置；所有需要 Android 系统能力的操作都从这个通道进入。
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
+        channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getPermissionSnapshot" -> result.success(getPermissionSnapshot())
+                "getSinglePointOverlaySnapshot" -> {
+                    result.success(
+                        singlePointOverlaySnapshot(
+                            isEnabled = singlePointOverlayManager.isShowing,
+                            isRunning = singlePointOverlayManager.isClickingRunning,
+                        ),
+                    )
+                }
                 "openAccessibilitySettings" -> {
                     openAccessibilitySettings()
                     result.success(null)
@@ -75,6 +90,13 @@ class MainActivity : FlutterActivity() {
         return mapOf(
             "accessibilityGranted" to isAccessibilityServiceEnabled(),
             "overlayGranted" to canDrawOverlays(),
+        )
+    }
+
+    private fun singlePointOverlaySnapshot(isEnabled: Boolean, isRunning: Boolean): Map<String, Boolean> {
+        return mapOf(
+            "isEnabled" to isEnabled,
+            "isRunning" to isRunning,
         )
     }
 

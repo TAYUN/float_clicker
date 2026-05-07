@@ -60,16 +60,34 @@ class ClickerController extends ChangeNotifier {
     }
 
     // 点击任务必须依附于单点模式悬浮窗；未开启模式时不允许进入运行态。
-    _isRunning = !_isRunning;
+    setRunning(!_isRunning);
+  }
+
+  void setRunning(bool value) {
+    if (!_isSinglePointModeEnabled && value) {
+      return;
+    }
+
+    if (_isRunning == value) {
+      return;
+    }
+
+    _isRunning = value;
+    notifyListeners();
+  }
+
+  void setSinglePointModeState({required bool isEnabled, bool? isRunning}) {
+    final nextRunning = isEnabled ? (isRunning ?? _isRunning) : false;
+    if (_isSinglePointModeEnabled == isEnabled && _isRunning == nextRunning) {
+      return;
+    }
+
+    _isSinglePointModeEnabled = isEnabled;
+    _isRunning = nextRunning;
     notifyListeners();
   }
 
   void toggleSinglePointMode() {
-    _isSinglePointModeEnabled = !_isSinglePointModeEnabled;
-    if (!_isSinglePointModeEnabled) {
-      // 关闭模式时，点击任务也应该被视为停止，避免页面残留“正在点击”状态。
-      _isRunning = false;
-    }
-    notifyListeners();
+    setSinglePointModeState(isEnabled: !_isSinglePointModeEnabled);
   }
 }

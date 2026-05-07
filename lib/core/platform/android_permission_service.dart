@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+typedef SinglePointOverlayStateChanged =
+    void Function(SinglePointOverlaySnapshot snapshot);
+
 class AndroidPermissionSnapshot {
   const AndroidPermissionSnapshot({
     required this.accessibilityGranted,
@@ -21,6 +24,28 @@ class AndroidPermissionSnapshot {
   static const unsupported = AndroidPermissionSnapshot(
     accessibilityGranted: false,
     overlayGranted: false,
+  );
+}
+
+class SinglePointOverlaySnapshot {
+  const SinglePointOverlaySnapshot({
+    required this.isEnabled,
+    required this.isRunning,
+  });
+
+  final bool isEnabled;
+  final bool isRunning;
+
+  factory SinglePointOverlaySnapshot.fromMap(Map<Object?, Object?> map) {
+    return SinglePointOverlaySnapshot(
+      isEnabled: map['isEnabled'] == true,
+      isRunning: map['isRunning'] == true,
+    );
+  }
+
+  static const disabled = SinglePointOverlaySnapshot(
+    isEnabled: false,
+    isRunning: false,
   );
 }
 
@@ -77,6 +102,21 @@ class AndroidPermissionService {
     await _invokeAndroidOnly('hideSinglePointOverlay');
   }
 
+  Future<SinglePointOverlaySnapshot> getSinglePointOverlaySnapshot() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      return SinglePointOverlaySnapshot.disabled;
+    }
+
+    try {
+      final result = await _channel.invokeMapMethod<Object?, Object?>(
+        'getSinglePointOverlaySnapshot',
+      );
+      return SinglePointOverlaySnapshot.fromMap(result ?? const {});
+    } on MissingPluginException {
+      return SinglePointOverlaySnapshot.disabled;
+    }
+  }
+
   Future<void> updateSinglePointSettings({
     required int intervalMs,
     required int repeatCount,
@@ -97,6 +137,38 @@ class AndroidPermissionService {
 
   Future<void> stopSinglePointClicking() async {
     await _invokeAndroidOnly('stopSinglePointClicking');
+  }
+
+  void setSinglePointOverlayStateChanged(
+    SinglePointOverlayStateChanged? onChanged,
+  ) {
+    _channel.setMethodCallHandler(
+      onChanged == null
+          ? null
+          : (call) async {
+              final arguments = call.arguments;
+              if (arguments is! Map<Object?, Object?>) {
+                return;
+              }
+
+              if (call.method == 'singlePointOverlayStateChanged') {
+                onChanged(SinglePointOverlaySnapshot.fromMap(arguments));
+                return;
+              }
+
+              if (call.method == 'singlePointClickingStateChanged') {
+                onChanged(
+                  SinglePointOverlaySnapshot(
+                    isEnabled: true,
+                    isRunning: arguments['isRunning'] == true,
+                  ),
+                );
+                return;
+              }
+
+              throw MissingPluginException();
+            },
+    );
   }
 
   Future<void> _invokeAndroidOnly(
