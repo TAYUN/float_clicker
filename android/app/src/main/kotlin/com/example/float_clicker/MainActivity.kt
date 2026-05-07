@@ -36,6 +36,10 @@ class MainActivity : FlutterActivity() {
                     singlePointOverlayManager.show(singlePointOverlaySettingsFrom(call.arguments))
                     result.success(null)
                 }
+                "updateSinglePointSettings" -> {
+                    singlePointOverlayManager.updateSettings(singlePointOverlaySettingsFrom(call.arguments))
+                    result.success(null)
+                }
                 "hideSinglePointOverlay" -> {
                     singlePointOverlayManager.hide()
                     result.success(null)

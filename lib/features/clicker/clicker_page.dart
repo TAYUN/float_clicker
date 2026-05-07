@@ -22,6 +22,7 @@ class _ClickerPageState extends State<ClickerPage> {
   final AndroidPermissionService _permissionService =
       AndroidPermissionService();
   final ClickerSettingsStore _settingsStore = const ClickerSettingsStore();
+  bool _isLoadingSettings = true;
 
   @override
   void initState() {
@@ -70,6 +71,9 @@ class _ClickerPageState extends State<ClickerPage> {
     }
 
     _controller.updateSettings(settings);
+    setState(() {
+      _isLoadingSettings = false;
+    });
   }
 
   Future<void> _toggleRunning() async {
@@ -105,6 +109,18 @@ class _ClickerPageState extends State<ClickerPage> {
 
     await _settingsStore.save(result);
     _controller.updateSettings(result);
+    if (_controller.isSinglePointModeEnabled) {
+      await _syncSinglePointSettings(result);
+    }
+  }
+
+  Future<void> _syncSinglePointSettings(ClickerSettings settings) async {
+    await _permissionService.updateSinglePointSettings(
+      intervalMs: settings.intervalMs,
+      repeatCount: settings.repeatCount,
+      infiniteLoop: settings.infiniteLoop,
+      tapDurationMs: settings.tapDurationMs,
+    );
   }
 
   @override
@@ -117,63 +133,69 @@ class _ClickerPageState extends State<ClickerPage> {
         return Scaffold(
           appBar: AppBar(title: const Text('单点模式')),
           body: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _StatusPanel(
-                  isEnabled: _controller.isSinglePointModeEnabled,
-                  isRunning: _controller.isRunning,
-                ),
-                const SizedBox(height: 16),
-                Card(
-                  child: Column(
+            child: _isLoadingSettings
+                ? const Center(child: CircularProgressIndicator())
+                : ListView(
+                    padding: const EdgeInsets.all(16),
                     children: [
-                      ListTile(
-                        leading: const Icon(Icons.settings),
-                        title: const Text('设置'),
-                        subtitle: Text(
-                          '间隔 ${settings.intervalMs} ms，次数 ${settings.infiniteLoop ? '无限循环' : settings.repeatCount}',
+                      _StatusPanel(
+                        isEnabled: _controller.isSinglePointModeEnabled,
+                        isRunning: _controller.isRunning,
+                      ),
+                      const SizedBox(height: 16),
+                      Card(
+                        child: Column(
+                          children: [
+                            ListTile(
+                              leading: const Icon(Icons.settings),
+                              title: const Text('设置'),
+                              subtitle: Text(
+                                '间隔 ${settings.intervalMs} ms，次数 ${settings.infiniteLoop ? '无限循环' : settings.repeatCount}',
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: _openSettings,
+                            ),
+                            const Divider(height: 1),
+                            ListTile(
+                              leading: const Icon(Icons.info),
+                              title: const Text('介绍向导'),
+                              subtitle: const Text('查看点位和工具条的使用方式'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => Navigator.of(
+                                context,
+                              ).pushNamed(ClickerGuidePage.routeName),
+                            ),
+                          ],
                         ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: _openSettings,
                       ),
-                      const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.info),
-                        title: const Text('介绍向导'),
-                        subtitle: const Text('查看点位和工具条的使用方式'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => Navigator.of(
-                          context,
-                        ).pushNamed(ClickerGuidePage.routeName),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: _toggleSinglePointMode,
+                        icon: Icon(
+                          _controller.isSinglePointModeEnabled
+                              ? Icons.close
+                              : Icons.play_arrow,
+                        ),
+                        label: Text(
+                          _controller.isSinglePointModeEnabled
+                              ? '关闭单点模式'
+                              : '开启单点模式',
+                        ),
                       ),
+                      if (_controller.isSinglePointModeEnabled) ...[
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: _toggleRunning,
+                          icon: Icon(
+                            _controller.isRunning
+                                ? Icons.stop
+                                : Icons.play_arrow,
+                          ),
+                          label: Text(_controller.isRunning ? '停止点击' : '开始点击'),
+                        ),
+                      ],
                     ],
                   ),
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: _toggleSinglePointMode,
-                  icon: Icon(
-                    _controller.isSinglePointModeEnabled
-                        ? Icons.close
-                        : Icons.play_arrow,
-                  ),
-                  label: Text(
-                    _controller.isSinglePointModeEnabled ? '关闭单点模式' : '开启单点模式',
-                  ),
-                ),
-                if (_controller.isSinglePointModeEnabled) ...[
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: _toggleRunning,
-                    icon: Icon(
-                      _controller.isRunning ? Icons.stop : Icons.play_arrow,
-                    ),
-                    label: Text(_controller.isRunning ? '停止点击' : '开始点击'),
-                  ),
-                ],
-              ],
-            ),
           ),
         );
       },

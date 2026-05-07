@@ -29,10 +29,7 @@ class SinglePointOverlayManager(private val context: Context) {
     private var tapDurationMs = 50
 
     fun show(settings: SinglePointOverlaySettings = SinglePointOverlaySettings()) {
-        intervalMs = settings.intervalMs.coerceAtLeast(50)
-        repeatCount = settings.repeatCount.coerceAtLeast(1)
-        infiniteLoop = settings.infiniteLoop
-        tapDurationMs = settings.tapDurationMs.coerceAtLeast(1)
+        updateSettings(settings)
 
         if (targetView != null || toolbarView != null) {
             return
@@ -53,6 +50,13 @@ class SinglePointOverlayManager(private val context: Context) {
         targetParams = nextTargetParams
         toolbarView = toolbar
         refreshToolbarState()
+    }
+
+    fun updateSettings(settings: SinglePointOverlaySettings) {
+        intervalMs = settings.intervalMs.coerceAtLeast(50)
+        repeatCount = settings.repeatCount.coerceAtLeast(1)
+        infiniteLoop = settings.infiniteLoop
+        tapDurationMs = settings.tapDurationMs.coerceAtLeast(1)
     }
 
     fun hide() {

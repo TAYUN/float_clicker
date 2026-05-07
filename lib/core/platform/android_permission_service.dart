@@ -73,6 +73,20 @@ class AndroidPermissionService {
     await _invokeAndroidOnly('hideSinglePointOverlay');
   }
 
+  Future<void> updateSinglePointSettings({
+    required int intervalMs,
+    required int repeatCount,
+    required bool infiniteLoop,
+    required int tapDurationMs,
+  }) async {
+    await _invokeAndroidOnly('updateSinglePointSettings', {
+      'intervalMs': intervalMs,
+      'repeatCount': repeatCount,
+      'infiniteLoop': infiniteLoop,
+      'tapDurationMs': tapDurationMs,
+    });
+  }
+
   Future<void> startSinglePointClicking() async {
     await _invokeAndroidOnly('startSinglePointClicking');
   }

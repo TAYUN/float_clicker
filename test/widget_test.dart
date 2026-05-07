@@ -7,11 +7,14 @@ import 'package:float_clicker/app.dart';
 
 void main() {
   const permissionChannel = MethodChannel('float_clicker/android_permissions');
+  final methodCalls = <MethodCall>[];
 
   setUp(() {
+    methodCalls.clear();
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(permissionChannel, (call) async {
+          methodCalls.add(call);
           if (call.method == 'getPermissionSnapshot') {
             return {'accessibilityGranted': false, 'overlayGranted': true};
           }
@@ -94,5 +97,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('间隔 900 ms，次数 4'), findsOneWidget);
+  });
+
+  testWidgets('Saving settings syncs native overlay when mode is enabled', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tester.tap(find.text('单点模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开启单点模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(EditableText).at(0), '700');
+    await tester.enterText(find.byType(EditableText).at(1), '70');
+    await tester.enterText(find.byType(EditableText).at(2), '2');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    final updateCall = methodCalls.lastWhere(
+      (call) => call.method == 'updateSinglePointSettings',
+    );
+    expect(updateCall.arguments, {
+      'intervalMs': 700,
+      'repeatCount': 2,
+      'infiniteLoop': false,
+      'tapDurationMs': 70,
+    });
   });
 }
