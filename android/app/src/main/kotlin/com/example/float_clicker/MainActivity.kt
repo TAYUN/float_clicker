@@ -1,6 +1,7 @@
 package com.example.float_clicker
 
 import android.content.ComponentName
+import android.content.res.Configuration
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -107,6 +108,13 @@ class MainActivity : FlutterActivity() {
             singlePointOverlayManager.hide()
         }
         super.onDestroy()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::singlePointOverlayManager.isInitialized) {
+            singlePointOverlayManager.handleConfigurationChanged()
+        }
     }
 
     private fun getPermissionSnapshot(): Map<String, Boolean> {

@@ -2,10 +2,13 @@ package com.example.float_clicker
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Point
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.hardware.display.DisplayManager
 import android.os.Build
+import android.view.Display
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
@@ -19,6 +22,8 @@ internal class OverlayWindowHelper(
     private val context: Context,
     private val windowManager: WindowManager,
 ) {
+    private val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+
     fun addView(view: View, params: WindowManager.LayoutParams) {
         windowManager.addView(view, params)
     }
@@ -54,12 +59,18 @@ internal class OverlayWindowHelper(
             width,
             height,
             type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = dpPosition(position.x)
             y = dpPosition(position.y)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
         }
     }
 
@@ -70,19 +81,20 @@ internal class OverlayWindowHelper(
 
         params.x = dpPosition(position.x)
         params.y = dpPosition(position.y)
+        coerceParamsToVisibleBounds(view, params)
         updateViewLayout(view, params)
     }
 
     fun coercePosition(position: OverlayPoint, widthDp: Int, heightDp: Int): OverlayPoint {
-        val metrics = context.resources.displayMetrics
-        val screenWidthDp = logicalPosition(metrics.widthPixels)
-        val screenHeightDp = logicalPosition(metrics.heightPixels)
-        val maxX = (screenWidthDp - widthDp).coerceAtLeast(0)
-        val maxY = (screenHeightDp - heightDp).coerceAtLeast(0)
+        val bounds = overlayBoundsPx(view = null)
+        val left = logicalPosition(bounds.left)
+        val top = logicalPosition(bounds.top)
+        val maxX = logicalPosition((bounds.right - dp(widthDp)).coerceAtLeast(bounds.left))
+        val maxY = logicalPosition((bounds.bottom - dp(heightDp)).coerceAtLeast(bounds.top))
 
         return OverlayPoint(
-            x = position.x.coerceIn(0, maxX),
-            y = position.y.coerceIn(0, maxY),
+            x = position.x.coerceIn(left, maxX),
+            y = position.y.coerceIn(top, maxY),
         )
     }
 
@@ -105,6 +117,8 @@ internal class OverlayWindowHelper(
         view.setOnTouchListener { touchedView, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    // 横竖屏或系统栏显隐后 params 可能仍是旧边界下的值；按当前可拖动区域收回边界。
+                    coerceParamsToVisibleBounds(touchedView.rootView, params)
                     // rawX/rawY 是屏幕坐标；params.x/y 是 overlay 左上角坐标。
                     startRawX = event.rawX
                     startRawY = event.rawY
@@ -133,6 +147,7 @@ internal class OverlayWindowHelper(
                     }
                     params.x = startX + dx.roundToInt()
                     params.y = startY + dy.roundToInt()
+                    coerceParamsToVisibleBounds(touchedView.rootView, params)
                     updateViewLayout(touchedView.rootView, params)
                     true
                 }
@@ -188,8 +203,85 @@ internal class OverlayWindowHelper(
         return dp(value)
     }
 
+    private fun coerceParamsToVisibleBounds(view: View, params: WindowManager.LayoutParams) {
+        val bounds = overlayBoundsPx(view)
+        val viewWidth = viewSizeOrParamSize(view.width, params.width)
+        val viewHeight = viewSizeOrParamSize(view.height, params.height)
+        val maxX = (bounds.right - viewWidth).coerceAtLeast(bounds.left)
+        val maxY = (bounds.bottom - viewHeight).coerceAtLeast(bounds.top)
+        val nextX = params.x.coerceIn(bounds.left, maxX)
+        val nextY = params.y.coerceIn(bounds.top, maxY)
+
+        if (nextX == params.x && nextY == params.y) {
+            return
+        }
+
+        params.x = nextX
+        params.y = nextY
+        updateViewLayout(view, params)
+    }
+
+    private fun overlayBoundsPx(view: View?): OverlayBoundsPx {
+        val screenSize = realScreenSizePx()
+        val isPortrait = screenSize.second >= screenSize.first
+
+        if (!isPortrait) {
+            // 横屏下部分系统会把 overlay 的可用宽度报告成竖屏宽度，导致右侧过早卡住。
+            // 这里放宽右/下边界，仅保留左/上非负，用户仍可拖回可见区域。
+            val relaxedMax = Int.MAX_VALUE / 4
+            return OverlayBoundsPx(left = 0, top = 0, right = relaxedMax, bottom = relaxedMax)
+        }
+
+        val topInset = statusBarHeightPx()
+        return OverlayBoundsPx(
+            left = 0,
+            top = topInset,
+            right = screenSize.first,
+            bottom = screenSize.second,
+        )
+    }
+
+    private fun viewSizeOrParamSize(viewSize: Int, paramSize: Int): Int {
+        if (viewSize > 0) {
+            return viewSize
+        }
+
+        return if (paramSize > 0) paramSize else 0
+    }
+
+    private fun statusBarHeightPx(): Int {
+        val resourceId = context.resources.getIdentifier("status_bar_height", "dimen", "android")
+        if (resourceId <= 0) {
+            return dp(24)
+        }
+
+        return context.resources.getDimensionPixelSize(resourceId)
+    }
+
+    private fun realScreenSizePx(): Pair<Int, Int> {
+        val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY)
+        val size = Point()
+        if (display != null) {
+            @Suppress("DEPRECATION")
+            display.getRealSize(size)
+            if (size.x > 0 && size.y > 0) {
+                return Pair(size.x, size.y)
+            }
+        }
+
+        val metrics = context.resources.displayMetrics
+        return Pair(metrics.widthPixels, metrics.heightPixels)
+    }
+
     private fun logicalPosition(value: Int): Int {
         val density = context.resources.displayMetrics.density
         return (value / density).roundToInt()
     }
 }
+
+private data class OverlayBoundsPx(
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+)

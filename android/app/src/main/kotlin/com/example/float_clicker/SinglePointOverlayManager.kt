@@ -1,6 +1,10 @@
 package com.example.float_clicker
 
 import android.content.Context
+import android.hardware.display.DisplayManager
+import android.os.Handler
+import android.os.Looper
+import android.view.Display
 import android.view.WindowManager
 import android.widget.Toast
 
@@ -9,10 +13,23 @@ class SinglePointOverlayManager(
     private val onOverlayStateChanged: (SinglePointOverlaySnapshot) -> Unit = {},
 ) {
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+    private val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val overlay = OverlayWindowHelper(context, windowManager)
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) = Unit
+        override fun onDisplayRemoved(displayId: Int) = Unit
+
+        override fun onDisplayChanged(displayId: Int) {
+            if (displayId == Display.DEFAULT_DISPLAY) {
+                handleDisplayBoundsChanged()
+            }
+        }
+    }
 
     private var taskStatus = SinglePointTaskStatus()
     private var interactionState = OverlayInteractionState()
+    private var isDisplayListenerRegistered = false
 
     // 当前配置保存在 overlay 管理器中。真正开始点击时会打包成 SinglePointClickRequest。
     private var intervalMs = 500
@@ -78,6 +95,7 @@ class SinglePointOverlayManager(
         applySettings(settings)
         coerceInteractionStateToScreen()
         targetComponent.show(interactionState.targetPosition)
+        ensureDisplayListener()
         refreshInteractionViews()
     }
 
@@ -101,12 +119,22 @@ class SinglePointOverlayManager(
         refreshInteractionViews()
     }
 
+    fun handleConfigurationChanged() {
+        if (!isShowing) {
+            return
+        }
+
+        // Activity 声明了 configChanges，横竖屏切换不会重建；这里主动按新屏幕尺寸刷新 overlay。
+        handleDisplayBoundsChanged()
+    }
+
     fun hide() {
         end()
         targetComponent.remove()
         toolbarComponent.remove()
         collapsedToolbarComponent.remove()
         actionButtonComponent.remove()
+        removeDisplayListener()
         notifyOverlayStateChanged()
     }
 
@@ -208,6 +236,32 @@ class SinglePointOverlayManager(
     private fun refreshTaskActionState() {
         toolbarComponent.updateTaskRunState(taskStatus.taskRunState)
         actionButtonComponent.updateTaskRunState(taskStatus.taskRunState)
+    }
+
+    private fun handleDisplayBoundsChanged() {
+        mainHandler.post {
+            if (isShowing) {
+                refreshInteractionViews()
+            }
+        }
+    }
+
+    private fun ensureDisplayListener() {
+        if (isDisplayListenerRegistered) {
+            return
+        }
+
+        displayManager.registerDisplayListener(displayListener, mainHandler)
+        isDisplayListenerRegistered = true
+    }
+
+    private fun removeDisplayListener() {
+        if (!isDisplayListenerRegistered) {
+            return
+        }
+
+        displayManager.unregisterDisplayListener(displayListener)
+        isDisplayListenerRegistered = false
     }
 
     private fun coerceInteractionStateToScreen() {
