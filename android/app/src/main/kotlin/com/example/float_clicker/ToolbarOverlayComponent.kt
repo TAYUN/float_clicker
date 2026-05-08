@@ -48,7 +48,9 @@ internal class ToolbarOverlayComponent(
                 onPositionChanged = { point -> onPositionChanged(point) },
                 onClick = ::handleDragButtonClick,
             )
-            overlayWindow.addView(toolbar, nextParams)
+            if (!overlayWindow.addView(toolbar, nextParams)) {
+                return
+            }
             view = toolbar
             params = nextParams
         } else {

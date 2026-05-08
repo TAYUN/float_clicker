@@ -41,7 +41,9 @@ internal class TargetOverlayComponent(
             params = nextParams,
             onPositionChanged = { point -> onPositionChanged(point) },
         )
-        overlayWindow.addView(target, nextParams)
+        if (!overlayWindow.addView(target, nextParams)) {
+            return
+        }
         view = target
         params = nextParams
     }

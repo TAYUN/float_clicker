@@ -204,6 +204,7 @@ class _ClickerPageState extends State<ClickerPage> with WidgetsBindingObserver {
     // MethodChannel 错误码是 Flutter 与 Android 之间的稳定协议；文案集中映射，避免旧原生英文透到界面上。
     return switch (error.code) {
       'overlay_permission_denied' => '悬浮窗权限未开启，请先在系统设置中允许显示在其他应用上层。',
+      'overlay_window_unavailable' => '悬浮窗创建失败，请确认悬浮窗权限仍然可用后重试。',
       'accessibility_service_unavailable' =>
         '无障碍服务未连接，请先在系统设置中开启 Float Clicker 无障碍服务。',
       'invalid_task_state' => '当前任务状态不支持该操作，请根据页面状态重新执行。',

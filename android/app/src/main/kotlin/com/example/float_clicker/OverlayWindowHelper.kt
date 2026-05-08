@@ -35,12 +35,16 @@ internal class OverlayWindowHelper(
 ) {
     private val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
 
-    fun addView(view: View, params: WindowManager.LayoutParams) {
-        windowManager.addView(view, params)
+    fun addView(view: View, params: WindowManager.LayoutParams): Boolean {
+        return runCatching {
+            windowManager.addView(view, params)
+        }.isSuccess
     }
 
-    fun updateViewLayout(view: View, params: WindowManager.LayoutParams) {
-        windowManager.updateViewLayout(view, params)
+    fun updateViewLayout(view: View, params: WindowManager.LayoutParams): Boolean {
+        return runCatching {
+            windowManager.updateViewLayout(view, params)
+        }.isSuccess
     }
 
     fun removeView(view: View?) {

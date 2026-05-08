@@ -40,7 +40,7 @@ class FloatClickerAccessibilityService : AccessibilityService() {
             .addStroke(GestureDescription.StrokeDescription(path, 0, durationMs))
             .build()
 
-        dispatchGesture(
+        val accepted = dispatchGesture(
             gesture,
             object : GestureResultCallback() {
                 override fun onCompleted(gestureDescription: GestureDescription?) {
@@ -56,6 +56,11 @@ class FloatClickerAccessibilityService : AccessibilityService() {
             },
             null,
         )
+        if (!accepted) {
+            // dispatchGesture 可能在系统拒绝派发时直接返回 false，且不会再触发回调。
+            // 必须主动通知调度器，否则任务会一直卡在“本次手势进行中”。
+            onComplete()
+        }
     }
 
     companion object {

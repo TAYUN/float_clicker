@@ -95,12 +95,16 @@ class SinglePointOverlayManager(
             interactionState = if (isShowing) interactionState else null,
         )
 
-    fun show(settings: SinglePointOverlaySettings = SinglePointOverlaySettings()) {
+    fun show(settings: SinglePointOverlaySettings = SinglePointOverlaySettings()): Boolean {
         applySettings(settings)
         coerceInteractionStateToScreen()
         targetComponent.show(interactionState.targetPosition, metrics)
+        if (!targetComponent.isShowing) {
+            return false
+        }
         ensureDisplayListener()
         refreshInteractionViews()
+        return true
     }
 
     fun updateSettings(settings: SinglePointOverlaySettings) {

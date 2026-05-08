@@ -30,7 +30,9 @@ internal class CollapsedToolbarComponent(
                 onPositionChanged = { point -> onPositionChanged(point) },
                 onClick = onExpand,
             )
-            overlayWindow.addView(collapsed, nextParams)
+            if (!overlayWindow.addView(collapsed, nextParams)) {
+                return
+            }
             view = collapsed
             params = nextParams
         } else {

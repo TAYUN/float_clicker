@@ -39,7 +39,9 @@ internal class ActionButtonOverlayComponent(
                 onClick = onTaskAction,
                 onLongClick = onEndTask,
             )
-            overlayWindow.addView(actionButton, nextParams)
+            if (!overlayWindow.addView(actionButton, nextParams)) {
+                return
+            }
             view = actionButton
             params = nextParams
         } else {

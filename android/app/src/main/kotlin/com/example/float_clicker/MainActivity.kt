@@ -71,8 +71,12 @@ class MainActivity : FlutterActivity() {
                         result.error("overlay_permission_denied", "悬浮窗权限未开启，请先在系统设置中允许显示在其他应用上层。", null)
                         return@setMethodCallHandler
                     }
-                    singlePointOverlayManager.show(singlePointOverlaySettingsFrom(call.arguments))
-                    result.success(null)
+                    val shown = singlePointOverlayManager.show(singlePointOverlaySettingsFrom(call.arguments))
+                    if (shown) {
+                        result.success(null)
+                    } else {
+                        result.error("overlay_window_unavailable", "悬浮窗创建失败，请确认悬浮窗权限仍然可用后重试。", null)
+                    }
                 }
                 "updateSinglePointSettings" -> {
                     singlePointOverlayManager.updateClickSettings(singlePointOverlaySettingsFrom(call.arguments))
