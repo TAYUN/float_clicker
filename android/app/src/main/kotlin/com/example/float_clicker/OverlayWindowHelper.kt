@@ -293,11 +293,14 @@ internal class OverlayWindowHelper(
         val screenSize = realScreenSizePx()
         val isPortrait = screenSize.second >= screenSize.first
         val treatAsLandscape = forceLandscapeVerticalBounds || !isPortrait
-        val relaxedMax = Int.MAX_VALUE / 4
         val topInset = if (treatAsLandscape) 0 else statusBarHeightPx()
         // 跨应用横屏时系统可能持续返回竖屏宽度；拖动 rawX 超出旧宽度后只放宽右边界。
         // 竖屏仍保持严格右边界，避免点位跑出屏幕右侧。
-        val right = if (relaxRight || treatAsLandscape) relaxedMax else screenSize.first
+        val right = if (relaxRight || treatAsLandscape) {
+            maxOf(screenSize.first, screenSize.second)
+        } else {
+            screenSize.first
+        }
         val bottom = if (treatAsLandscape) {
             minOf(screenSize.first, screenSize.second)
         } else {
