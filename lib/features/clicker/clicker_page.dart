@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/platform/android_permission_service.dart';
+import '../../core/settings/global_overlay_appearance_settings.dart';
+import '../../core/settings/global_overlay_appearance_store.dart';
 import 'clicker_controller.dart';
 import 'clicker_guide_page.dart';
 import 'clicker_settings.dart';
@@ -22,6 +24,10 @@ class _ClickerPageState extends State<ClickerPage> with WidgetsBindingObserver {
   final AndroidPermissionService _permissionService =
       AndroidPermissionService();
   final ClickerSettingsStore _settingsStore = const ClickerSettingsStore();
+  final GlobalOverlayAppearanceStore _appearanceStore =
+      const GlobalOverlayAppearanceStore();
+  GlobalOverlayAppearanceSettings _appearanceSettings =
+      GlobalOverlayAppearanceSettings.defaults;
   AndroidPermissionSnapshot _permissionSnapshot =
       AndroidPermissionSnapshot.unsupported;
   bool _hasPermissionSnapshot = false;
@@ -83,6 +89,7 @@ class _ClickerPageState extends State<ClickerPage> with WidgetsBindingObserver {
 
   Future<void> _loadSavedSettings() async {
     final settings = await _settingsStore.loadSinglePointSettings();
+    final appearanceSettings = await _appearanceStore.load();
     final permissionSnapshot = await _permissionService.getSnapshot();
     final overlaySnapshot = await _permissionService
         .getSinglePointOverlaySnapshot();
@@ -91,6 +98,7 @@ class _ClickerPageState extends State<ClickerPage> with WidgetsBindingObserver {
     }
 
     _applyPermissionSnapshot(permissionSnapshot, reportChanges: false);
+    _appearanceSettings = appearanceSettings;
     _controller.updateSinglePointSettings(settings);
     if (!permissionSnapshot.overlayGranted) {
       _controller.setSinglePointModeState(isEnabled: false);
@@ -270,13 +278,14 @@ class _ClickerPageState extends State<ClickerPage> with WidgetsBindingObserver {
   }
 
   Future<void> _openSettings() async {
-    final result = await Navigator.of(context).push<SinglePointSettings>(
+    final result = await Navigator.of(context).push<ClickerSettingsResult>(
       MaterialPageRoute(
         builder: (_) => ClickerSettingsPage(
           initialSettings: SinglePointSettings(
             clickerSettings: _controller.settings,
             overlayUiSettings: _controller.overlayUiSettings,
           ),
+          initialAppearanceSettings: _appearanceSettings,
         ),
       ),
     );
@@ -285,14 +294,20 @@ class _ClickerPageState extends State<ClickerPage> with WidgetsBindingObserver {
       return;
     }
 
-    await _settingsStore.saveSinglePointSettings(result);
-    _controller.updateSinglePointSettings(result);
+    await Future.wait([
+      _settingsStore.saveSinglePointSettings(result.singlePointSettings),
+      _appearanceStore.save(result.appearanceSettings),
+    ]);
+    _appearanceSettings = result.appearanceSettings;
+    _controller.updateSinglePointSettings(result.singlePointSettings);
     if (_controller.isSinglePointModeEnabled) {
       // 悬浮窗已经创建时，保存新配置后需要同步给 Android，
       // 否则工具条播放按钮仍会按旧间隔/次数执行。
-      await _syncSinglePointSettings(result.clickerSettings);
+      await _syncSinglePointSettings(
+        result.singlePointSettings.clickerSettings,
+      );
       await _permissionService.updateSinglePointOverlayUiSettings(
-        result.overlayUiSettings,
+        result.singlePointSettings.overlayUiSettings,
       );
     }
   }

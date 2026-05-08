@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:float_clicker/app.dart';
+import 'package:float_clicker/core/settings/global_overlay_appearance_store.dart';
 
 void main() {
   const permissionChannel = MethodChannel('float_clicker/android_permissions');
@@ -96,6 +97,15 @@ void main() {
     await tester.ensureVisible(finder);
     await tester.pumpAndSettle();
     await tester.tap(finder);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> scrollUntilTextVisible(WidgetTester tester, String text) async {
+    final finder = find.text(text);
+    for (var index = 0; index < 4 && finder.evaluate().isEmpty; index += 1) {
+      await scrollDown(tester);
+    }
+    await tester.ensureVisible(finder);
     await tester.pumpAndSettle();
   }
 
@@ -265,6 +275,71 @@ void main() {
     await tapVisibleText(tester, '保存');
 
     expect(find.text('间隔 500 ms，次数 10，极简模式'), findsOneWidget);
+  });
+
+  testWidgets('Global overlay control scale persists after saving settings', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tester.tap(find.text('单点模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+
+    await scrollUntilTextVisible(tester, '全局悬浮外观');
+
+    expect(find.text('全局悬浮外观'), findsOneWidget);
+    expect(find.text('100%'), findsOneWidget);
+
+    await tester.drag(find.byType(Slider), const Offset(160, 0));
+    await tester.pumpAndSettle();
+    await tapVisibleText(tester, '保存');
+
+    final preferences = await SharedPreferences.getInstance();
+    final savedScale = preferences.getDouble(
+      GlobalOverlayAppearanceStore.overlayControlScaleKey,
+    );
+    expect(savedScale, isNotNull);
+    expect(savedScale!, greaterThan(1.0));
+
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+
+    await scrollUntilTextVisible(tester, '${(savedScale * 100).round()}%');
+
+    expect(find.text('${(savedScale * 100).round()}%'), findsOneWidget);
+  });
+
+  testWidgets('Reset global overlay control scale saves default value', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      GlobalOverlayAppearanceStore.overlayControlScaleKey: 1.3,
+    });
+
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tester.tap(find.text('单点模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+
+    await scrollUntilTextVisible(tester, '130%');
+
+    expect(find.text('130%'), findsOneWidget);
+
+    await tapVisibleText(tester, '恢复默认');
+    expect(find.text('100%'), findsOneWidget);
+    await tapVisibleText(tester, '保存');
+
+    final preferences = await SharedPreferences.getInstance();
+    expect(
+      preferences.getDouble(
+        GlobalOverlayAppearanceStore.overlayControlScaleKey,
+      ),
+      1.0,
+    );
   });
 
   testWidgets('Saving settings syncs native overlay when mode is enabled', (
