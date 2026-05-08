@@ -355,11 +355,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun canDrawOverlays(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            Settings.canDrawOverlays(this)
-        } else {
-            true
-        }
+        return Settings.canDrawOverlays(this)
     }
 
     private fun openAccessibilitySettings() {
@@ -367,13 +363,11 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun openOverlaySettings() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName"),
-            )
-            startActivity(intent)
-        }
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:$packageName"),
+        )
+        startActivity(intent)
     }
 
     companion object {

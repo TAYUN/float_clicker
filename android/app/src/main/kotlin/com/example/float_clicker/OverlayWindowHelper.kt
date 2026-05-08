@@ -14,6 +14,7 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.Surface
 import android.view.View
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.TextView
 import kotlin.math.abs
@@ -319,6 +320,20 @@ internal class OverlayWindowHelper(
     }
 
     private fun statusBarHeightPx(): Int {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val topInset = metricsWindowManager.maximumWindowMetrics.windowInsets
+                .getInsetsIgnoringVisibility(WindowInsets.Type.statusBars())
+                .top
+            if (topInset > 0) {
+                return topInset
+            }
+        }
+
+        return legacyStatusBarHeightPx()
+    }
+
+    @Suppress("DiscouragedApi", "InternalInsetResource")
+    private fun legacyStatusBarHeightPx(): Int {
         val resourceId = context.resources.getIdentifier("status_bar_height", "dimen", "android")
         if (resourceId <= 0) {
             return dp(24)
