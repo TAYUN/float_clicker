@@ -5,9 +5,12 @@ import 'package:flutter/services.dart';
 
 import '../settings/global_overlay_appearance_settings.dart';
 import '../../features/clicker/clicker_settings.dart';
+import '../../features/multi_point/multi_point_settings.dart';
 
 typedef SinglePointOverlayStateChanged =
     FutureOr<void> Function(SinglePointOverlaySnapshot snapshot);
+typedef MultiPointOverlayStateChanged =
+    FutureOr<void> Function(MultiPointOverlaySnapshot snapshot);
 typedef AndroidPermissionStateChanged =
     FutureOr<void> Function(AndroidPermissionSnapshot snapshot);
 
@@ -72,6 +75,51 @@ class SinglePointOverlaySnapshot {
   );
 }
 
+class MultiPointOverlaySnapshot {
+  const MultiPointOverlaySnapshot({
+    required this.modeEnabled,
+    required this.taskRunState,
+    required this.targets,
+    this.overlayUiSettings,
+    this.completedRounds = 0,
+    this.currentRound = 0,
+    this.executedActionCountInCurrentRound = 0,
+    this.currentTargetId,
+    this.errorCode,
+  });
+
+  final bool modeEnabled;
+  final TaskRunState taskRunState;
+  final MultiPointTargets targets;
+  final MultiPointOverlayUiSettings? overlayUiSettings;
+  final int completedRounds;
+  final int currentRound;
+  final int executedActionCountInCurrentRound;
+  final String? currentTargetId;
+  final String? errorCode;
+
+  factory MultiPointOverlaySnapshot.fromMap(Map<Object?, Object?> map) {
+    return MultiPointOverlaySnapshot(
+      modeEnabled: map['modeEnabled'] == true,
+      taskRunState: TaskRunState.fromName(map['taskRunState'] as String?),
+      targets: _multiPointTargetsFromMap(map),
+      overlayUiSettings: _multiPointOverlayUiSettingsFromMap(map),
+      completedRounds: (map['completedRounds'] as num?)?.toInt() ?? 0,
+      currentRound: (map['currentRound'] as num?)?.toInt() ?? 0,
+      executedActionCountInCurrentRound:
+          (map['executedActionCountInCurrentRound'] as num?)?.toInt() ?? 0,
+      currentTargetId: map['currentTargetId'] as String?,
+      errorCode: map['errorCode'] as String?,
+    );
+  }
+
+  static final disabled = MultiPointOverlaySnapshot(
+    modeEnabled: false,
+    taskRunState: TaskRunState.idle,
+    targets: MultiPointTargets.defaults(),
+  );
+}
+
 OverlayUiSettings? _overlayUiSettingsFromMap(Map<Object?, Object?> map) {
   if (map['interactionMode'] is! String) {
     return null;
@@ -105,6 +153,49 @@ OverlayUiSettings? _overlayUiSettingsFromMap(Map<Object?, Object?> map) {
     isToolbarCollapsed:
         (map['isToolbarCollapsed'] as bool?) ?? defaults.isToolbarCollapsed,
   );
+}
+
+MultiPointOverlayUiSettings? _multiPointOverlayUiSettingsFromMap(
+  Map<Object?, Object?> map,
+) {
+  if (map['interactionMode'] is! String) {
+    return null;
+  }
+
+  final defaults = MultiPointOverlayUiSettings.defaults;
+  return MultiPointOverlayUiSettings(
+    interactionMode: OverlayInteractionMode.fromName(
+      map['interactionMode'] as String?,
+    ),
+    toolbarPositionX:
+        (map['toolbarPositionX'] as num?)?.toInt() ?? defaults.toolbarPositionX,
+    toolbarPositionY:
+        (map['toolbarPositionY'] as num?)?.toInt() ?? defaults.toolbarPositionY,
+    collapsedToolbarPositionX:
+        (map['collapsedToolbarPositionX'] as num?)?.toInt() ??
+        defaults.collapsedToolbarPositionX,
+    collapsedToolbarPositionY:
+        (map['collapsedToolbarPositionY'] as num?)?.toInt() ??
+        defaults.collapsedToolbarPositionY,
+    actionButtonPositionX:
+        (map['actionButtonPositionX'] as num?)?.toInt() ??
+        defaults.actionButtonPositionX,
+    actionButtonPositionY:
+        (map['actionButtonPositionY'] as num?)?.toInt() ??
+        defaults.actionButtonPositionY,
+    isToolbarCollapsed:
+        (map['isToolbarCollapsed'] as bool?) ?? defaults.isToolbarCollapsed,
+  );
+}
+
+MultiPointTargets _multiPointTargetsFromMap(Map<Object?, Object?> map) {
+  final targets = map['targets'];
+  if (targets is! List<Object?>) {
+    return MultiPointTargets.defaults();
+  }
+
+  // 原生快照和本地持久化使用同一组点位字段，统一走模型解析以复用坏数据兜底。
+  return MultiPointTargets.fromJsonList(targets);
 }
 
 class AndroidPermissionService {
@@ -172,6 +263,28 @@ class AndroidPermissionService {
     await _invokeAndroidOnly('hideSinglePointOverlay');
   }
 
+  Future<void> showMultiPointOverlay({
+    required MultiPointConfiguration configuration,
+    GlobalOverlayAppearanceSettings appearanceSettings =
+        GlobalOverlayAppearanceSettings.defaults,
+  }) async {
+    await _invokeAndroidOnly(
+      'showMultiPointOverlay',
+      arguments: {
+        ..._multiPointSettingsArguments(configuration.settings),
+        ..._multiPointOverlayUiSettingsArguments(
+          configuration.overlayUiSettings,
+        ),
+        ..._multiPointTargetsArguments(configuration.targets),
+        ..._globalOverlayAppearanceArguments(appearanceSettings),
+      },
+    );
+  }
+
+  Future<void> hideMultiPointOverlay() async {
+    await _invokeAndroidOnly('hideMultiPointOverlay');
+  }
+
   Future<SinglePointOverlaySnapshot> getSinglePointOverlaySnapshot() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return SinglePointOverlaySnapshot.disabled;
@@ -184,6 +297,21 @@ class AndroidPermissionService {
       return SinglePointOverlaySnapshot.fromMap(result ?? const {});
     } on MissingPluginException {
       return SinglePointOverlaySnapshot.disabled;
+    }
+  }
+
+  Future<MultiPointOverlaySnapshot> getMultiPointOverlaySnapshot() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      return MultiPointOverlaySnapshot.disabled;
+    }
+
+    try {
+      final result = await _channel.invokeMapMethod<Object?, Object?>(
+        'getMultiPointOverlaySnapshot',
+      );
+      return MultiPointOverlaySnapshot.fromMap(result ?? const {});
+    } on MissingPluginException {
+      return MultiPointOverlaySnapshot.disabled;
     }
   }
 
@@ -214,6 +342,24 @@ class AndroidPermissionService {
     );
   }
 
+  Future<void> updateMultiPointTargets(MultiPointTargets targets) async {
+    await _invokeAndroidOnly(
+      'updateMultiPointTargets',
+      arguments: _multiPointTargetsArguments(targets),
+      ignoreMissingPlugin: true,
+    );
+  }
+
+  Future<void> updateMultiPointOverlayUiSettings(
+    MultiPointOverlayUiSettings settings,
+  ) async {
+    await _invokeAndroidOnly(
+      'updateMultiPointOverlayUiSettings',
+      arguments: _multiPointOverlayUiSettingsArguments(settings),
+      ignoreMissingPlugin: true,
+    );
+  }
+
   Future<void> updateGlobalOverlayAppearanceSettings(
     GlobalOverlayAppearanceSettings settings,
   ) async {
@@ -226,6 +372,10 @@ class AndroidPermissionService {
 
   Future<void> startSinglePointClicking() async {
     await _invokeAndroidOnly('startSinglePointClicking');
+  }
+
+  Future<void> startMultiPointClicking() async {
+    await _invokeAndroidOnly('startMultiPointClicking');
   }
 
   Future<void> pauseSinglePointClicking() async {
@@ -251,6 +401,16 @@ class AndroidPermissionService {
       _singlePointOverlayListeners.remove(_listenerKey);
     } else {
       _singlePointOverlayListeners[_listenerKey] = onChanged;
+    }
+  }
+
+  void setMultiPointOverlayStateChanged(
+    MultiPointOverlayStateChanged? onChanged,
+  ) {
+    if (onChanged == null) {
+      _multiPointOverlayListeners.remove(_listenerKey);
+    } else {
+      _multiPointOverlayListeners[_listenerKey] = onChanged;
     }
   }
 
@@ -301,6 +461,39 @@ class AndroidPermissionService {
     };
   }
 
+  Map<String, Object?> _multiPointSettingsArguments(
+    MultiPointSettings settings,
+  ) {
+    return {
+      'intervalMs': settings.intervalMs,
+      'repeatCount': settings.repeatCount,
+      'infiniteLoop': settings.infiniteLoop,
+      'tapDurationMs': settings.tapDurationMs,
+    };
+  }
+
+  Map<String, Object?> _multiPointOverlayUiSettingsArguments(
+    MultiPointOverlayUiSettings settings,
+  ) {
+    return {
+      'interactionMode': settings.interactionMode.name,
+      'toolbarPositionX': settings.toolbarPositionX,
+      'toolbarPositionY': settings.toolbarPositionY,
+      'collapsedToolbarPositionX': settings.collapsedToolbarPositionX,
+      'collapsedToolbarPositionY': settings.collapsedToolbarPositionY,
+      'actionButtonPositionX': settings.actionButtonPositionX,
+      'actionButtonPositionY': settings.actionButtonPositionY,
+      'isToolbarCollapsed': settings.isToolbarCollapsed,
+    };
+  }
+
+  Map<String, Object?> _multiPointTargetsArguments(MultiPointTargets targets) {
+    return {
+      // 点位坐标传左上角，Android 侧负责窗口显示和后续点击中心点换算。
+      'targets': targets.toJsonList(),
+    };
+  }
+
   Map<String, Object?> _globalOverlayAppearanceArguments(
     GlobalOverlayAppearanceSettings settings,
   ) {
@@ -323,6 +516,8 @@ class AndroidPermissionService {
 
   static final Map<Object, SinglePointOverlayStateChanged>
   _singlePointOverlayListeners = {};
+  static final Map<Object, MultiPointOverlayStateChanged>
+  _multiPointOverlayListeners = {};
   static final Map<Object, AndroidPermissionStateChanged>
   _permissionStateListeners = {};
 
@@ -349,6 +544,16 @@ class AndroidPermissionService {
         final snapshot = SinglePointOverlaySnapshot.fromMap(arguments);
         for (final listener in List<SinglePointOverlayStateChanged>.of(
           _singlePointOverlayListeners.values,
+        )) {
+          await listener(snapshot);
+        }
+        return;
+      }
+
+      if (call.method == 'multiPointOverlayStateChanged') {
+        final snapshot = MultiPointOverlaySnapshot.fromMap(arguments);
+        for (final listener in List<MultiPointOverlayStateChanged>.of(
+          _multiPointOverlayListeners.values,
         )) {
           await listener(snapshot);
         }

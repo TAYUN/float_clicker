@@ -183,8 +183,7 @@ class MainActivity : FlutterActivity() {
                 "startMultiPointClicking",
                 "pauseMultiPointClicking",
                 "resumeMultiPointClicking",
-                "endMultiPointClicking",
-                -> {
+                "endMultiPointClicking" -> {
                     result.error("unimplemented_method", "Android 多点点击调度尚未实现。", null)
                 }
                 else -> result.notImplemented()

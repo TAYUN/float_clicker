@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import 'package:float_clicker/core/platform/android_permission_service.dart';
+import 'package:float_clicker/core/settings/global_overlay_appearance_settings.dart';
+import 'package:float_clicker/core/settings/global_overlay_appearance_store.dart';
 import 'package:float_clicker/features/clicker/clicker_settings.dart';
 import 'multi_point_settings.dart';
 import 'multi_point_settings_page.dart';
@@ -17,12 +21,18 @@ class MultiPointPage extends StatefulWidget {
 class _MultiPointPageState extends State<MultiPointPage> {
   final MultiPointSettingsStore _settingsStore =
       const MultiPointSettingsStore();
+  final AndroidPermissionService _permissionService =
+      AndroidPermissionService();
+  final GlobalOverlayAppearanceStore _appearanceStore =
+      const GlobalOverlayAppearanceStore();
 
   MultiPointConfiguration _configuration = MultiPointConfiguration(
     settings: MultiPointSettings.defaults,
     overlayUiSettings: MultiPointOverlayUiSettings.defaults,
     targets: MultiPointTargets.defaults(),
   );
+  GlobalOverlayAppearanceSettings _appearanceSettings =
+      GlobalOverlayAppearanceSettings.defaults;
   TaskRunState _taskRunState = TaskRunState.idle;
   bool _isLoadingSettings = true;
   bool _isModeEnabled = false;
@@ -32,17 +42,38 @@ class _MultiPointPageState extends State<MultiPointPage> {
   @override
   void initState() {
     super.initState();
+    _permissionService.setMultiPointOverlayStateChanged(
+      _handleMultiPointOverlayStateChanged,
+    );
     _loadSavedConfiguration();
+  }
+
+  @override
+  void dispose() {
+    _permissionService.setMultiPointOverlayStateChanged(null);
+    super.dispose();
   }
 
   Future<void> _loadSavedConfiguration() async {
     final configuration = await _settingsStore.loadConfiguration();
+    final appearanceSettings = await _appearanceStore.load();
+    final overlaySnapshot = await _permissionService
+        .getMultiPointOverlaySnapshot();
     if (!mounted) {
       return;
     }
 
+    final snapshotConfiguration = _configurationFromSnapshot(
+      overlaySnapshot,
+      fallback: configuration,
+    );
     setState(() {
-      _configuration = configuration;
+      _appearanceSettings = appearanceSettings;
+      _configuration = snapshotConfiguration;
+      _isModeEnabled = overlaySnapshot.modeEnabled;
+      _taskRunState = overlaySnapshot.modeEnabled
+          ? overlaySnapshot.taskRunState
+          : TaskRunState.idle;
       _isLoadingSettings = false;
     });
   }
@@ -110,13 +141,15 @@ class _MultiPointPageState extends State<MultiPointPage> {
   }
 
   Future<void> _updateTargets(MultiPointTargets targets) async {
-    await _saveConfiguration(
-      MultiPointConfiguration(
-        settings: _configuration.settings,
-        overlayUiSettings: _configuration.overlayUiSettings,
-        targets: targets,
-      ),
+    final nextConfiguration = MultiPointConfiguration(
+      settings: _configuration.settings,
+      overlayUiSettings: _configuration.overlayUiSettings,
+      targets: targets,
     );
+    await _saveConfiguration(nextConfiguration);
+    if (_isModeEnabled) {
+      await _permissionService.updateMultiPointTargets(targets);
+    }
   }
 
   Future<void> _openSettings() async {
@@ -130,30 +163,110 @@ class _MultiPointPageState extends State<MultiPointPage> {
     }
 
     await _saveConfiguration(result.configuration);
+    if (_isModeEnabled) {
+      await _permissionService.updateMultiPointOverlayUiSettings(
+        result.configuration.overlayUiSettings,
+      );
+    }
   }
 
-  void _toggleModeEnabled() {
-    setState(() {
-      _isModeEnabled = !_isModeEnabled;
-      if (!_isModeEnabled) {
-        _taskRunState = TaskRunState.idle;
+  Future<void> _toggleModeEnabled() async {
+    try {
+      if (_isModeEnabled) {
+        await _permissionService.hideMultiPointOverlay();
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _isModeEnabled = false;
+          _taskRunState = TaskRunState.idle;
+        });
+        return;
       }
-    });
 
-    // P2 只开放 Flutter 编辑页面，真正的多点悬浮窗会在 Android Overlay 阶段接入。
-    _showMessage(
-      _isModeEnabled ? '多点页面已进入编辑状态，Android 多点悬浮层将在后续阶段接入。' : '多点编辑状态已关闭。',
-    );
+      await _permissionService.showMultiPointOverlay(
+        configuration: _configuration,
+        appearanceSettings: _appearanceSettings,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isModeEnabled = true;
+        _taskRunState = TaskRunState.idle;
+      });
+    } on PlatformException catch (error) {
+      _showPlatformError(error, fallback: '无法开启多点悬浮层');
+    }
   }
 
-  void _startTask() {
+  Future<void> _startTask() async {
     final errorCode = _configuration.targets.executionValidationErrorCode;
     if (errorCode == MultiPointTargets.noEnabledTargetsErrorCode) {
       _showMessage('请至少启用 1 个点位后再执行。');
       return;
     }
 
-    _showMessage('Android 多点顺序点击尚未接入，当前阶段只支持编辑和保存点位。');
+    try {
+      await _permissionService.startMultiPointClicking();
+    } on PlatformException catch (error) {
+      _showPlatformError(error, fallback: '无法执行多点任务');
+    }
+  }
+
+  Future<void> _handleMultiPointOverlayStateChanged(
+    MultiPointOverlaySnapshot snapshot,
+  ) async {
+    if (!mounted) {
+      return;
+    }
+
+    final nextConfiguration = _configurationFromSnapshot(
+      snapshot,
+      fallback: _configuration,
+    );
+    await _settingsStore.saveConfiguration(nextConfiguration);
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _configuration = nextConfiguration;
+      _isModeEnabled = snapshot.modeEnabled;
+      _taskRunState = snapshot.modeEnabled
+          ? snapshot.taskRunState
+          : TaskRunState.idle;
+    });
+  }
+
+  MultiPointConfiguration _configurationFromSnapshot(
+    MultiPointOverlaySnapshot snapshot, {
+    required MultiPointConfiguration fallback,
+  }) {
+    if (!snapshot.modeEnabled) {
+      return fallback;
+    }
+
+    return MultiPointConfiguration(
+      settings: fallback.settings,
+      overlayUiSettings:
+          snapshot.overlayUiSettings ?? fallback.overlayUiSettings,
+      targets: snapshot.targets,
+    );
+  }
+
+  void _showPlatformError(PlatformException error, {required String fallback}) {
+    final message = switch (error.code) {
+      'mode_conflict' => '单点模式已开启，请先关闭单点模式。',
+      'overlay_permission_denied' => '悬浮窗权限未开启，请先在系统设置中允许显示在其他应用上层。',
+      'overlay_window_unavailable' => '多点悬浮窗创建失败，请确认悬浮窗权限仍然可用后重试。',
+      'unimplemented_method' => error.message ?? 'Android 多点点击调度尚未实现。',
+      _ =>
+        (error.message?.trim().isNotEmpty ?? false)
+            ? error.message!.trim()
+            : fallback,
+    };
+    _showMessage(message);
   }
 
   void _showMessage(String message) {
@@ -218,7 +331,7 @@ class _MultiPointPageState extends State<MultiPointPage> {
                   FilledButton.icon(
                     onPressed: _toggleModeEnabled,
                     icon: Icon(_isModeEnabled ? Icons.close : Icons.layers),
-                    label: Text(_isModeEnabled ? '关闭多点编辑' : '开启多点编辑'),
+                    label: Text(_isModeEnabled ? '关闭多点悬浮层' : '开启多点悬浮层'),
                   ),
                   if (_isModeEnabled) ...[
                     const SizedBox(height: 12),

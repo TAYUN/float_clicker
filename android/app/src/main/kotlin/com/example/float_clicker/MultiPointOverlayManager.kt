@@ -27,22 +27,26 @@ internal class MultiPointOverlayManager(
     private var appearanceSettings = OverlayAppearanceSettings()
     private var metrics = OverlayComponentMetrics(overlay, appearanceSettings)
     private var targets = defaultMultiPointTargets()
+    private var isModeEnabled = false
 
     val isShowing: Boolean
-        get() = targetComponent.isShowing
+        get() = isModeEnabled
 
     val snapshot: MultiPointOverlaySnapshot
         get() = MultiPointOverlaySnapshot(
-            modeEnabled = isShowing,
+            modeEnabled = isModeEnabled,
             taskRunState = TaskRunState.IDLE,
             targets = targets,
-            overlayUiState = if (isShowing) overlayUiState else null,
+            overlayUiState = if (isModeEnabled) overlayUiState else null,
         )
 
     fun show(settings: MultiPointOverlaySettings = MultiPointOverlaySettings()): Boolean {
         applySettings(settings)
-        val firstEnabledTarget = targets.firstOrNull { it.enabled } ?: targets.firstOrNull()
+        isModeEnabled = true
+        val firstEnabledTarget = targets.firstOrNull { it.enabled }
         if (firstEnabledTarget == null) {
+            // 允许所有点位禁用；此时多点模式开启，但悬浮层不显示目标点，执行前由 Flutter/调度器拒绝。
+            targetComponent.remove()
             notifyOverlayStateChanged()
             return true
         }
@@ -58,13 +62,14 @@ internal class MultiPointOverlayManager(
     }
 
     fun hide() {
+        isModeEnabled = false
         targetComponent.remove()
         notifyOverlayStateChanged()
     }
 
     fun updateTargets(nextTargets: List<MultiPointTargetState>) {
         targets = normalizedTargets(nextTargets)
-        if (isShowing) {
+        if (isModeEnabled) {
             show(
                 MultiPointOverlaySettings(
                     targets = targets,

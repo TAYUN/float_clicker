@@ -11,9 +11,12 @@ void main() {
   const methodCodec = StandardMethodCodec();
   final methodCalls = <MethodCall>[];
   var nativeOverlayEnabled = false;
+  var nativeMultiPointOverlayEnabled = false;
   var nativeTaskRunState = 'idle';
+  var nativeMultiPointTaskRunState = 'idle';
   var nativeExecutedCount = 0;
   var nativeOverlaySettings = <String, Object?>{};
+  var nativeMultiPointSettings = <String, Object?>{};
   var nativeAccessibilityGranted = false;
   var nativeAccessibilityConnected = false;
   var nativeOverlayGranted = true;
@@ -103,9 +106,12 @@ void main() {
   setUp(() {
     methodCalls.clear();
     nativeOverlayEnabled = false;
+    nativeMultiPointOverlayEnabled = false;
     nativeTaskRunState = 'idle';
+    nativeMultiPointTaskRunState = 'idle';
     nativeExecutedCount = 0;
     nativeOverlaySettings = _defaultNativeOverlaySettings();
+    nativeMultiPointSettings = _defaultNativeMultiPointSettings();
     nativeAccessibilityGranted = false;
     nativeAccessibilityConnected = false;
     nativeOverlayGranted = true;
@@ -129,12 +135,53 @@ void main() {
               if (nativeOverlayEnabled) ...nativeOverlaySettings,
             };
           }
+          if (call.method == 'getMultiPointOverlaySnapshot') {
+            return {
+              'modeEnabled': nativeMultiPointOverlayEnabled,
+              'taskRunState': nativeMultiPointTaskRunState,
+              'completedRounds': 0,
+              'currentRound': 0,
+              'executedActionCountInCurrentRound': 0,
+              ...nativeMultiPointSettings,
+            };
+          }
           if (call.method == 'showSinglePointOverlay') {
             nativeOverlayEnabled = true;
             nativeTaskRunState = 'idle';
             nativeExecutedCount = 0;
             nativeOverlaySettings = _objectMap(call.arguments);
             return null;
+          }
+          if (call.method == 'showMultiPointOverlay') {
+            nativeMultiPointOverlayEnabled = true;
+            nativeMultiPointTaskRunState = 'idle';
+            nativeMultiPointSettings = _objectMap(call.arguments);
+            return null;
+          }
+          if (call.method == 'hideMultiPointOverlay') {
+            nativeMultiPointOverlayEnabled = false;
+            nativeMultiPointTaskRunState = 'idle';
+            return null;
+          }
+          if (call.method == 'updateMultiPointTargets') {
+            nativeMultiPointSettings = {
+              ...nativeMultiPointSettings,
+              ..._objectMap(call.arguments),
+            };
+            return null;
+          }
+          if (call.method == 'updateMultiPointOverlayUiSettings') {
+            nativeMultiPointSettings = {
+              ...nativeMultiPointSettings,
+              ..._objectMap(call.arguments),
+            };
+            return null;
+          }
+          if (call.method == 'startMultiPointClicking') {
+            throw PlatformException(
+              code: 'unimplemented_method',
+              message: 'Android 多点点击调度尚未实现。',
+            );
           }
           if (call.method == 'hideSinglePointOverlay') {
             nativeOverlayEnabled = false;
@@ -266,7 +313,7 @@ void main() {
     expect(find.text('点位列表'), findsOneWidget);
     expect(find.text('点位 1'), findsOneWidget);
     expect(find.text('点位 2'), findsOneWidget);
-    expect(find.text('开启多点编辑'), findsOneWidget);
+    expect(find.text('开启多点悬浮层'), findsOneWidget);
     expect(find.text('间隔 500 ms，循环 10 轮，普通模式'), findsOneWidget);
   });
 
@@ -329,7 +376,7 @@ void main() {
     await tester.tap(find.byType(Switch).at(1));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('开启多点编辑'));
+    await tester.tap(find.text('开启多点悬浮层'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
@@ -834,6 +881,37 @@ Map<String, Object?> _defaultNativeOverlaySettings() {
     'actionButtonPositionX': 18,
     'actionButtonPositionY': 260,
     'isToolbarCollapsed': false,
+  };
+}
+
+Map<String, Object?> _defaultNativeMultiPointSettings() {
+  return {
+    'interactionMode': 'normal',
+    'toolbarPositionX': 18,
+    'toolbarPositionY': 180,
+    'collapsedToolbarPositionX': 18,
+    'collapsedToolbarPositionY': 180,
+    'actionButtonPositionX': 18,
+    'actionButtonPositionY': 260,
+    'isToolbarCollapsed': false,
+    'targets': [
+      {
+        'id': 'p1',
+        'order': 1,
+        'label': '1',
+        'x': 280.0,
+        'y': 260.0,
+        'enabled': true,
+      },
+      {
+        'id': 'p2',
+        'order': 2,
+        'label': '2',
+        'x': 280.0,
+        'y': 340.0,
+        'enabled': true,
+      },
+    ],
   };
 }
 
