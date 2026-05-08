@@ -1,0 +1,20 @@
+# Float Clicker project-local Codex collaboration configuration.
+
+[paths]
+global_rules = "AGENTS.md"
+agents_dir = ".codex/agents"
+skills_dir = ".codex/skills"
+coding_standards = "docs/development/coding-standards.md"
+architecture = "docs/development/architecture.md"
+testing = "docs/development/testing.md"
+stage_plan = "docs/开发计划/多点模式开发阶段管理.md"
+handoff = "docs/AI协作/新对话交接提示词.md"
+
+[workflow]
+default_skill = "multi-role-feature"
+agent_order = ["explorer", "pm", "builder", "tester", "reporter"]
+
+[project]
+current_focus = "P2: Flutter 多点页面"
+protected_area = "单点模式已基本稳定，修改多点时必须保护单点回归"
+deferred_scope = "多配置执行、高级连招、并行任务不进入基础多点第一版"
