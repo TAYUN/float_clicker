@@ -243,6 +243,9 @@ void main() {
           if (call.method == 'updateGlobalOverlayAppearanceSettings') {
             return null;
           }
+          if (call.method == 'sendAppToBackground') {
+            return null;
+          }
           return null;
         });
   });
@@ -421,9 +424,9 @@ void main() {
     expect(find.textContaining('坐标 (345, 456)'), findsOneWidget);
 
     final preferences = await SharedPreferences.getInstance();
-    final savedTargets = jsonDecode(
-      preferences.getString('multi_point.targets_json')!,
-    ) as List<Object?>;
+    final savedTargets =
+        jsonDecode(preferences.getString('multi_point.targets_json')!)
+            as List<Object?>;
     final p2 = savedTargets.cast<Map<String, Object?>>().firstWhere(
       (target) => target['id'] == 'p2',
     );
@@ -748,6 +751,29 @@ void main() {
     expect(find.text('单点任务执行中'), findsOneWidget);
     expect(find.text('已执行 4 次'), findsOneWidget);
   });
+
+  testWidgets(
+    'Home system back sends app to background without hiding overlay',
+    (tester) async {
+      nativeOverlayEnabled = true;
+
+      await tester.pumpWidget(const FloatClickerApp());
+      await tester.pumpAndSettle();
+
+      methodCalls.clear();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(
+        methodCalls.where((call) => call.method == 'sendAppToBackground'),
+        hasLength(1),
+      );
+      expect(
+        methodCalls.where((call) => call.method == 'hideSinglePointOverlay'),
+        isEmpty,
+      );
+    },
+  );
 
   testWidgets('Home and mode page both receive native overlay events', (
     tester,

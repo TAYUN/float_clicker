@@ -98,73 +98,84 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Float Clicker')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text('权限状态', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            _PermissionCard(
-              icon: Icons.accessibility_new,
-              title: '无障碍权限',
-              subtitle: '用于执行模拟点击，需要用户在系统设置中开启',
-              isGranted: _permissionSnapshot.accessibilityGranted,
-              isConnected: _permissionSnapshot.accessibilityConnected,
-              connectedLabel: '已连接',
-              disconnectedLabel: '服务未连接',
-              isLoading: _isLoadingPermissions,
-              onTap: _openAccessibilitySettings,
-            ),
-            const SizedBox(height: 12),
-            _PermissionCard(
-              icon: Icons.layers,
-              title: '悬浮窗口权限',
-              subtitle: '用于显示工具条和点击点，需要允许显示在其他应用上层',
-              isGranted: _permissionSnapshot.overlayGranted,
-              isConnected: _permissionSnapshot.overlayGranted,
-              connectedLabel: '已开启',
-              disconnectedLabel: '去开启',
-              isLoading: _isLoadingPermissions,
-              onTap: _openOverlaySettings,
-            ),
-            const SizedBox(height: 24),
-            Text('当前运行状态', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            _RunStateCard(snapshot: _singlePointSnapshot),
-            const SizedBox(height: 24),
-            Text('全局配置', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            _ModeTile(
-              icon: Icons.tune,
-              title: '全局设置',
-              subtitle: '调整悬浮点位、控制条和独立控件大小',
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () =>
-                  Navigator.of(context).pushNamed(GlobalSettingsPage.routeName),
-            ),
-            const SizedBox(height: 24),
-            Text('点击模式', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            _ModeTile(
-              icon: Icons.touch_app,
-              title: '单点模式',
-              subtitle: '拖动一个点击点，在固定位置重复点击',
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () =>
-                  Navigator.of(context).pushNamed(ClickerPage.routeName),
-            ),
-            const SizedBox(height: 12),
-            _ModeTile(
-              icon: Icons.control_point_duplicate,
-              title: '多点模式',
-              subtitle: '编辑多个点击点，按顺序执行的基础配置',
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () =>
-                  Navigator.of(context).pushNamed(MultiPointPage.routeName),
-            ),
-          ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          return;
+        }
+
+        _permissionService.sendAppToBackground();
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Float Clicker')),
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Text('权限状态', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              _PermissionCard(
+                icon: Icons.accessibility_new,
+                title: '无障碍权限',
+                subtitle: '用于执行模拟点击，需要用户在系统设置中开启',
+                isGranted: _permissionSnapshot.accessibilityGranted,
+                isConnected: _permissionSnapshot.accessibilityConnected,
+                connectedLabel: '已连接',
+                disconnectedLabel: '服务未连接',
+                isLoading: _isLoadingPermissions,
+                onTap: _openAccessibilitySettings,
+              ),
+              const SizedBox(height: 12),
+              _PermissionCard(
+                icon: Icons.layers,
+                title: '悬浮窗口权限',
+                subtitle: '用于显示工具条和点击点，需要允许显示在其他应用上层',
+                isGranted: _permissionSnapshot.overlayGranted,
+                isConnected: _permissionSnapshot.overlayGranted,
+                connectedLabel: '已开启',
+                disconnectedLabel: '去开启',
+                isLoading: _isLoadingPermissions,
+                onTap: _openOverlaySettings,
+              ),
+              const SizedBox(height: 24),
+              Text('当前运行状态', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              _RunStateCard(snapshot: _singlePointSnapshot),
+              const SizedBox(height: 24),
+              Text('全局配置', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              _ModeTile(
+                icon: Icons.tune,
+                title: '全局设置',
+                subtitle: '调整悬浮点位、控制条和独立控件大小',
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(
+                  context,
+                ).pushNamed(GlobalSettingsPage.routeName),
+              ),
+              const SizedBox(height: 24),
+              Text('点击模式', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              _ModeTile(
+                icon: Icons.touch_app,
+                title: '单点模式',
+                subtitle: '拖动一个点击点，在固定位置重复点击',
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () =>
+                    Navigator.of(context).pushNamed(ClickerPage.routeName),
+              ),
+              const SizedBox(height: 12),
+              _ModeTile(
+                icon: Icons.control_point_duplicate,
+                title: '多点模式',
+                subtitle: '编辑多个点击点，按顺序执行的基础配置',
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () =>
+                    Navigator.of(context).pushNamed(MultiPointPage.routeName),
+              ),
+            ],
+          ),
         ),
       ),
     );

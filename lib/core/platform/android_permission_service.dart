@@ -257,6 +257,11 @@ class AndroidPermissionService {
     await _invokeAndroidOnly('openOverlaySettings');
   }
 
+  Future<void> sendAppToBackground() async {
+    // 主页系统返回只表示用户想离开 App；悬浮窗是否关闭必须由“关闭模式”入口决定。
+    await _invokeAndroidOnly('sendAppToBackground', ignoreMissingPlugin: true);
+  }
+
   Future<void> showSinglePointOverlay({
     required int intervalMs,
     required int repeatCount,

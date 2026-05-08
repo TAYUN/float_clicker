@@ -95,6 +95,11 @@ class MainActivity : FlutterActivity() {
                     openOverlaySettings()
                     result.success(null)
                 }
+                "sendAppToBackground" -> {
+                    // 主页返回键只把 App 退到后台，悬浮窗生命周期继续交给“关闭模式”和权限异常收尾控制。
+                    moveTaskToBack(true)
+                    result.success(null)
+                }
                 "showSinglePointOverlay" -> {
                     // 悬浮窗权限必须在创建 WindowManager overlay 前确认，否则 addView 会失败。
                     if (!canDrawOverlays()) {
