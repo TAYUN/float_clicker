@@ -16,11 +16,18 @@ class MainActivity : FlutterActivity() {
     private val channelName = "float_clicker/android_permissions"
     private lateinit var channel: MethodChannel
     private lateinit var singlePointOverlayManager: SinglePointOverlayManager
+    private lateinit var multiPointOverlayManager: MultiPointOverlayManager
     private val mainHandler = Handler(Looper.getMainLooper())
     private val overlayPermissionCheckRunnable = object : Runnable {
         override fun run() {
             if (::singlePointOverlayManager.isInitialized && singlePointOverlayManager.isShowing && !canDrawOverlays()) {
                 singlePointOverlayManager.handleOverlayPermissionRevoked()
+                if (::channel.isInitialized) {
+                    channel.invokeMethod("permissionSnapshotChanged", getPermissionSnapshot())
+                }
+            }
+            if (::multiPointOverlayManager.isInitialized && multiPointOverlayManager.isShowing && !canDrawOverlays()) {
+                multiPointOverlayManager.hide()
                 if (::channel.isInitialized) {
                     channel.invokeMethod("permissionSnapshotChanged", getPermissionSnapshot())
                 }
@@ -49,6 +56,12 @@ class MainActivity : FlutterActivity() {
                 snapshot.toMap(),
             )
         }
+        multiPointOverlayManager = MultiPointOverlayManager(this) { snapshot ->
+            channel.invokeMethod(
+                "multiPointOverlayStateChanged",
+                snapshot.toMap(),
+            )
+        }
 
         // Flutter 侧只负责页面和配置；所有需要 Android 系统能力的操作都从这个通道进入。
         channel.setMethodCallHandler { call, result ->
@@ -56,6 +69,9 @@ class MainActivity : FlutterActivity() {
                 "getPermissionSnapshot" -> result.success(getPermissionSnapshot())
                 "getSinglePointOverlaySnapshot" -> {
                     result.success(singlePointOverlayManager.snapshot.toMap())
+                }
+                "getMultiPointOverlaySnapshot" -> {
+                    result.success(multiPointOverlayManager.snapshot.toMap())
                 }
                 "openAccessibilitySettings" -> {
                     openAccessibilitySettings()
@@ -69,6 +85,10 @@ class MainActivity : FlutterActivity() {
                     // 悬浮窗权限必须在创建 WindowManager overlay 前确认，否则 addView 会失败。
                     if (!canDrawOverlays()) {
                         result.error("overlay_permission_denied", "悬浮窗权限未开启，请先在系统设置中允许显示在其他应用上层。", null)
+                        return@setMethodCallHandler
+                    }
+                    if (multiPointOverlayManager.isShowing) {
+                        result.error("mode_conflict", "多点模式已开启，请先关闭多点模式。", null)
                         return@setMethodCallHandler
                     }
                     val shown = singlePointOverlayManager.show(singlePointOverlaySettingsFrom(call.arguments))
@@ -129,7 +149,43 @@ class MainActivity : FlutterActivity() {
                 }
                 "updateGlobalOverlayAppearanceSettings" -> {
                     singlePointOverlayManager.updateAppearanceSettings(overlayAppearanceSettingsFrom(call.arguments))
+                    multiPointOverlayManager.updateAppearanceSettings(overlayAppearanceSettingsFrom(call.arguments))
                     result.success(null)
+                }
+                "showMultiPointOverlay" -> {
+                    if (!canDrawOverlays()) {
+                        result.error("overlay_permission_denied", "悬浮窗权限未开启，请先在系统设置中允许显示在其他应用上层。", null)
+                        return@setMethodCallHandler
+                    }
+                    if (singlePointOverlayManager.isShowing) {
+                        result.error("mode_conflict", "单点模式已开启，请先关闭单点模式。", null)
+                        return@setMethodCallHandler
+                    }
+                    val shown = multiPointOverlayManager.show(multiPointOverlaySettingsFrom(call.arguments))
+                    if (shown) {
+                        result.success(null)
+                    } else {
+                        result.error("overlay_window_unavailable", "多点悬浮窗创建失败，请确认悬浮窗权限仍然可用后重试。", null)
+                    }
+                }
+                "hideMultiPointOverlay" -> {
+                    multiPointOverlayManager.hide()
+                    result.success(null)
+                }
+                "updateMultiPointTargets" -> {
+                    multiPointOverlayManager.updateTargets(multiPointTargetsFrom(call.arguments))
+                    result.success(null)
+                }
+                "updateMultiPointOverlayUiSettings" -> {
+                    multiPointOverlayManager.updateOverlayUiState(multiPointOverlayUiStateFrom(call.arguments))
+                    result.success(null)
+                }
+                "startMultiPointClicking",
+                "pauseMultiPointClicking",
+                "resumeMultiPointClicking",
+                "endMultiPointClicking",
+                -> {
+                    result.error("unimplemented_method", "Android 多点点击调度尚未实现。", null)
                 }
                 else -> result.notImplemented()
             }
@@ -141,6 +197,9 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         if (::singlePointOverlayManager.isInitialized) {
             singlePointOverlayManager.hide()
+        }
+        if (::multiPointOverlayManager.isInitialized) {
+            multiPointOverlayManager.hide()
         }
         mainHandler.removeCallbacks(overlayPermissionCheckRunnable)
         AccessibilityServiceStateBus.removeListener(accessibilityConnectionListener)
@@ -171,6 +230,20 @@ class MainActivity : FlutterActivity() {
             infiniteLoop = map["infiniteLoop"] as? Boolean ?: false,
             tapDurationMs = (map["tapDurationMs"] as? Number)?.toInt() ?: 50,
             interactionState = overlayInteractionStateFrom(arguments),
+            appearanceSettings = overlayAppearanceSettingsFrom(arguments),
+        )
+    }
+
+    private fun multiPointOverlaySettingsFrom(arguments: Any?): MultiPointOverlaySettings {
+        val map = arguments as? Map<*, *> ?: return MultiPointOverlaySettings()
+        // P3 只使用 Overlay 和点位字段；点击参数先保存进设置结构，真实调度留给 P4。
+        return MultiPointOverlaySettings(
+            intervalMs = (map["intervalMs"] as? Number)?.toInt() ?: 500,
+            repeatCount = (map["repeatCount"] as? Number)?.toInt() ?: 10,
+            infiniteLoop = map["infiniteLoop"] as? Boolean ?: false,
+            tapDurationMs = (map["tapDurationMs"] as? Number)?.toInt() ?: 50,
+            targets = multiPointTargetsFrom(arguments),
+            overlayUiState = multiPointOverlayUiStateFrom(arguments),
             appearanceSettings = overlayAppearanceSettingsFrom(arguments),
         )
     }
@@ -207,6 +280,36 @@ class MainActivity : FlutterActivity() {
             ),
             isToolbarCollapsed = map["isToolbarCollapsed"] as? Boolean ?: false,
         )
+    }
+
+    private fun multiPointOverlayUiStateFrom(arguments: Any?): MultiPointOverlayUiState {
+        val map = arguments as? Map<*, *> ?: return MultiPointOverlayUiState()
+        return MultiPointOverlayUiState(
+            interactionMode = OverlayInteractionMode.fromWireName(map["interactionMode"] as? String),
+            toolbarPosition = overlayPointFrom(map, "toolbarPositionX", "toolbarPositionY", OverlayPoint(18, 180)),
+            collapsedToolbarPosition = overlayPointFrom(
+                map,
+                "collapsedToolbarPositionX",
+                "collapsedToolbarPositionY",
+                OverlayPoint(18, 180),
+            ),
+            actionButtonPosition = overlayPointFrom(
+                map,
+                "actionButtonPositionX",
+                "actionButtonPositionY",
+                OverlayPoint(18, 260),
+            ),
+            isToolbarCollapsed = map["isToolbarCollapsed"] as? Boolean ?: false,
+        )
+    }
+
+    private fun multiPointTargetsFrom(arguments: Any?): List<MultiPointTargetState> {
+        val map = arguments as? Map<*, *> ?: return defaultMultiPointTargets()
+        val rawTargets = map["targets"] as? List<*> ?: return defaultMultiPointTargets()
+        val parsedTargets = rawTargets.mapIndexedNotNull { index, value ->
+            MultiPointTargetState.fromMap(value, fallbackOrder = index + 1)
+        }
+        return parsedTargets.ifEmpty { defaultMultiPointTargets() }
     }
 
     private fun overlayPointFrom(
