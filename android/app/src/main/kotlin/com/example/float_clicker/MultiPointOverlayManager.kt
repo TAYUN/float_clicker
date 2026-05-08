@@ -2,14 +2,46 @@ package com.example.float_clicker
 
 import android.content.Context
 import android.view.WindowManager
+import android.widget.Toast
 
 internal class MultiPointOverlayManager(
     private val context: Context,
     private val onOverlayStateChanged: (MultiPointOverlaySnapshot) -> Unit = {},
+    private val onTargetPositionChanged: (String, OverlayPoint) -> Unit = { _, _ -> },
 ) {
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val overlay = OverlayWindowHelper(context, windowManager)
     private val targetComponents = mutableMapOf<String, MultiPointTargetOverlayComponent>()
+    private val toolbarComponent = ToolbarOverlayComponent(
+        context = context,
+        overlayWindow = overlay,
+        onPositionChanged = { point ->
+            overlayUiState = overlayUiState.copy(toolbarPosition = point)
+            notifyOverlayStateChanged()
+        },
+        onTaskAction = ::showTaskUnavailableMessage,
+        onEndTask = ::showTaskUnavailableMessage,
+        onClose = ::hide,
+        onCollapse = ::collapseToolbar,
+    )
+    private val collapsedToolbarComponent = CollapsedToolbarComponent(
+        overlayWindow = overlay,
+        onPositionChanged = { point ->
+            overlayUiState = overlayUiState.copy(collapsedToolbarPosition = point)
+            notifyOverlayStateChanged()
+        },
+        onExpand = ::expandToolbar,
+    )
+    private val actionButtonComponent = ActionButtonOverlayComponent(
+        context = context,
+        overlayWindow = overlay,
+        onPositionChanged = { point ->
+            overlayUiState = overlayUiState.copy(actionButtonPosition = point)
+            notifyOverlayStateChanged()
+        },
+        onTaskAction = ::showTaskUnavailableMessage,
+        onEndTask = ::showTaskUnavailableMessage,
+    )
 
     private var overlayUiState = MultiPointOverlayUiState()
     private var appearanceSettings = OverlayAppearanceSettings()
@@ -32,6 +64,7 @@ internal class MultiPointOverlayManager(
         applySettings(settings)
         isModeEnabled = true
         refreshTargetComponents()
+        refreshInteractionViews()
         notifyOverlayStateChanged()
         return targets.none { it.enabled } || targetComponents.isNotEmpty()
     }
@@ -39,6 +72,7 @@ internal class MultiPointOverlayManager(
     fun hide() {
         isModeEnabled = false
         removeAllTargetComponents()
+        removeInteractionComponents()
         notifyOverlayStateChanged()
     }
 
@@ -59,6 +93,9 @@ internal class MultiPointOverlayManager(
 
     fun updateOverlayUiState(state: MultiPointOverlayUiState) {
         overlayUiState = state
+        if (isModeEnabled) {
+            refreshInteractionViews()
+        }
         notifyOverlayStateChanged()
     }
 
@@ -67,6 +104,7 @@ internal class MultiPointOverlayManager(
         metrics = OverlayComponentMetrics(overlay, appearanceSettings)
         if (isModeEnabled) {
             refreshTargetComponents()
+            refreshInteractionViews()
         }
         notifyOverlayStateChanged()
     }
@@ -113,6 +151,66 @@ internal class MultiPointOverlayManager(
         targetComponents.clear()
     }
 
+    private fun refreshInteractionViews() {
+        if (!isModeEnabled) {
+            removeInteractionComponents()
+            return
+        }
+
+        if (overlayUiState.shouldShowToolbar()) {
+            toolbarComponent.show(
+                position = overlayUiState.toolbarPosition,
+                taskRunState = TaskRunState.IDLE,
+                canCollapse = overlayUiState.interactionMode == OverlayInteractionMode.COMPACT,
+                metrics = metrics,
+            )
+        } else {
+            toolbarComponent.remove()
+        }
+
+        if (overlayUiState.shouldShowCollapsedToolbar()) {
+            collapsedToolbarComponent.show(overlayUiState.collapsedToolbarPosition, metrics)
+        } else {
+            collapsedToolbarComponent.remove()
+        }
+
+        if (overlayUiState.shouldShowActionButton()) {
+            actionButtonComponent.show(
+                position = overlayUiState.actionButtonPosition,
+                taskRunState = TaskRunState.IDLE,
+                metrics = metrics,
+            )
+        } else {
+            actionButtonComponent.remove()
+        }
+    }
+
+    private fun removeInteractionComponents() {
+        toolbarComponent.remove()
+        collapsedToolbarComponent.remove()
+        actionButtonComponent.remove()
+    }
+
+    private fun collapseToolbar() {
+        if (overlayUiState.interactionMode != OverlayInteractionMode.COMPACT) {
+            return
+        }
+
+        overlayUiState = overlayUiState.copy(isToolbarCollapsed = true)
+        refreshInteractionViews()
+        notifyOverlayStateChanged()
+    }
+
+    private fun expandToolbar() {
+        overlayUiState = overlayUiState.copy(isToolbarCollapsed = false)
+        refreshInteractionViews()
+        notifyOverlayStateChanged()
+    }
+
+    private fun showTaskUnavailableMessage() {
+        Toast.makeText(context.applicationContext, "多点点击调度尚未实现", Toast.LENGTH_SHORT).show()
+    }
+
     private fun handleTargetPositionChanged(targetId: String, point: OverlayPoint) {
         targets = targets.map { target ->
             if (target.id == targetId) {
@@ -121,6 +219,8 @@ internal class MultiPointOverlayManager(
                 target
             }
         }
+        // 点位拖动需要单独回传，Flutter 侧据此只更新对应点位并保存 targets_json。
+        onTargetPositionChanged(targetId, point)
         notifyOverlayStateChanged()
     }
 

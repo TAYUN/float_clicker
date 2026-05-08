@@ -45,12 +45,16 @@ class _MultiPointPageState extends State<MultiPointPage> {
     _permissionService.setMultiPointOverlayStateChanged(
       _handleMultiPointOverlayStateChanged,
     );
+    _permissionService.setMultiPointTargetPositionChanged(
+      _handleMultiPointTargetPositionChanged,
+    );
     _loadSavedConfiguration();
   }
 
   @override
   void dispose() {
     _permissionService.setMultiPointOverlayStateChanged(null);
+    _permissionService.setMultiPointTargetPositionChanged(null);
     super.dispose();
   }
 
@@ -236,6 +240,43 @@ class _MultiPointPageState extends State<MultiPointPage> {
       _taskRunState = snapshot.modeEnabled
           ? snapshot.taskRunState
           : TaskRunState.idle;
+    });
+  }
+
+  Future<void> _handleMultiPointTargetPositionChanged(
+    MultiPointTargetPositionChange change,
+  ) async {
+    if (!mounted) {
+      return;
+    }
+
+    final currentTargets = _configuration.targets;
+    final targetExists = currentTargets.values.any(
+      (target) => target.id == change.id,
+    );
+    if (!targetExists) {
+      return;
+    }
+
+    // 点位拖动只更新坐标，不重排、不改启禁，避免原生事件覆盖 Flutter 侧刚完成的结构编辑。
+    final nextTargets = currentTargets.updateTarget(
+      currentTargets.values
+          .firstWhere((target) => target.id == change.id)
+          .copyWith(x: change.x, y: change.y),
+    );
+    final nextConfiguration = MultiPointConfiguration(
+      settings: _configuration.settings,
+      overlayUiSettings: _configuration.overlayUiSettings,
+      targets: nextTargets,
+    );
+
+    await _settingsStore.saveTargets(nextTargets);
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _configuration = nextConfiguration;
     });
   }
 

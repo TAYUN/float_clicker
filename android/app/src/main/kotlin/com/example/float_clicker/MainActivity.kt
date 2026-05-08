@@ -56,12 +56,26 @@ class MainActivity : FlutterActivity() {
                 snapshot.toMap(),
             )
         }
-        multiPointOverlayManager = MultiPointOverlayManager(this) { snapshot ->
-            channel.invokeMethod(
-                "multiPointOverlayStateChanged",
-                snapshot.toMap(),
-            )
-        }
+        multiPointOverlayManager = MultiPointOverlayManager(
+            context = this,
+            onOverlayStateChanged = { snapshot ->
+                channel.invokeMethod(
+                    "multiPointOverlayStateChanged",
+                    snapshot.toMap(),
+                )
+            },
+            onTargetPositionChanged = { targetId, point ->
+                // P3.5 只回传坐标变化，不触发真实点击；点击中心点换算留给 P4 调度。
+                channel.invokeMethod(
+                    "onMultiPointTargetPositionChanged",
+                    mapOf(
+                        "id" to targetId,
+                        "x" to point.x,
+                        "y" to point.y,
+                    ),
+                )
+            },
+        )
 
         // Flutter 侧只负责页面和配置；所有需要 Android 系统能力的操作都从这个通道进入。
         channel.setMethodCallHandler { call, result ->

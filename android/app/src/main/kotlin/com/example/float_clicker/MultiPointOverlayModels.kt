@@ -63,6 +63,23 @@ data class MultiPointOverlayUiState(
             "isToolbarCollapsed" to isToolbarCollapsed,
         )
     }
+
+    fun shouldShowToolbar(): Boolean {
+        return when (interactionMode) {
+            OverlayInteractionMode.NORMAL -> true
+            OverlayInteractionMode.COMPACT -> !isToolbarCollapsed
+            OverlayInteractionMode.MINIMAL -> false
+        }
+    }
+
+    fun shouldShowCollapsedToolbar(): Boolean {
+        return interactionMode == OverlayInteractionMode.COMPACT && isToolbarCollapsed
+    }
+
+    fun shouldShowActionButton(): Boolean {
+        return interactionMode == OverlayInteractionMode.MINIMAL ||
+            (interactionMode == OverlayInteractionMode.COMPACT && isToolbarCollapsed)
+    }
 }
 
 data class MultiPointOverlaySettings(

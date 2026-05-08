@@ -11,6 +11,8 @@ typedef SinglePointOverlayStateChanged =
     FutureOr<void> Function(SinglePointOverlaySnapshot snapshot);
 typedef MultiPointOverlayStateChanged =
     FutureOr<void> Function(MultiPointOverlaySnapshot snapshot);
+typedef MultiPointTargetPositionChanged =
+    FutureOr<void> Function(MultiPointTargetPositionChange change);
 typedef AndroidPermissionStateChanged =
     FutureOr<void> Function(AndroidPermissionSnapshot snapshot);
 
@@ -118,6 +120,26 @@ class MultiPointOverlaySnapshot {
     taskRunState: TaskRunState.idle,
     targets: MultiPointTargets.defaults(),
   );
+}
+
+class MultiPointTargetPositionChange {
+  const MultiPointTargetPositionChange({
+    required this.id,
+    required this.x,
+    required this.y,
+  });
+
+  final String id;
+  final double x;
+  final double y;
+
+  factory MultiPointTargetPositionChange.fromMap(Map<Object?, Object?> map) {
+    return MultiPointTargetPositionChange(
+      id: (map['id'] as String?)?.trim() ?? '',
+      x: (map['x'] as num?)?.toDouble() ?? 0,
+      y: (map['y'] as num?)?.toDouble() ?? 0,
+    );
+  }
 }
 
 OverlayUiSettings? _overlayUiSettingsFromMap(Map<Object?, Object?> map) {
@@ -414,6 +436,16 @@ class AndroidPermissionService {
     }
   }
 
+  void setMultiPointTargetPositionChanged(
+    MultiPointTargetPositionChanged? onChanged,
+  ) {
+    if (onChanged == null) {
+      _multiPointTargetPositionListeners.remove(_listenerKey);
+    } else {
+      _multiPointTargetPositionListeners[_listenerKey] = onChanged;
+    }
+  }
+
   void setPermissionStateChanged(AndroidPermissionStateChanged? onChanged) {
     if (onChanged == null) {
       _permissionStateListeners.remove(_listenerKey);
@@ -518,6 +550,8 @@ class AndroidPermissionService {
   _singlePointOverlayListeners = {};
   static final Map<Object, MultiPointOverlayStateChanged>
   _multiPointOverlayListeners = {};
+  static final Map<Object, MultiPointTargetPositionChanged>
+  _multiPointTargetPositionListeners = {};
   static final Map<Object, AndroidPermissionStateChanged>
   _permissionStateListeners = {};
 
@@ -556,6 +590,20 @@ class AndroidPermissionService {
           _multiPointOverlayListeners.values,
         )) {
           await listener(snapshot);
+        }
+        return;
+      }
+
+      if (call.method == 'onMultiPointTargetPositionChanged') {
+        final change = MultiPointTargetPositionChange.fromMap(arguments);
+        // 空 id 说明原生侧传参异常，直接丢弃，避免误改第一条点位。
+        if (change.id.isEmpty) {
+          return;
+        }
+        for (final listener in List<MultiPointTargetPositionChanged>.of(
+          _multiPointTargetPositionListeners.values,
+        )) {
+          await listener(change);
         }
         return;
       }

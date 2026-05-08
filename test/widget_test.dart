@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -81,6 +83,25 @@ void main() {
               'accessibilityGranted': accessibilityGranted,
               'accessibilityConnected': accessibilityConnected,
               'overlayGranted': overlayGranted,
+            }),
+          ),
+          (_) {},
+        );
+  }
+
+  Future<void> sendMultiPointTargetPosition({
+    required String id,
+    required int x,
+    required int y,
+  }) async {
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          permissionChannel.name,
+          methodCodec.encodeMethodCall(
+            MethodCall('onMultiPointTargetPositionChanged', {
+              'id': id,
+              'x': x,
+              'y': y,
             }),
           ),
           (_) {},
@@ -383,6 +404,32 @@ void main() {
     await tapVisibleText(tester, '执行任务');
 
     expect(find.text('请至少启用 1 个点位后再执行。'), findsOneWidget);
+  });
+
+  testWidgets('Multi point target position callback is persisted', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+    await tester.tap(find.text('开启多点悬浮层'));
+    await tester.pumpAndSettle();
+
+    await sendMultiPointTargetPosition(id: 'p2', x: 345, y: 456);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('坐标 (345, 456)'), findsOneWidget);
+
+    final preferences = await SharedPreferences.getInstance();
+    final savedTargets = jsonDecode(
+      preferences.getString('multi_point.targets_json')!,
+    ) as List<Object?>;
+    final p2 = savedTargets.cast<Map<String, Object?>>().firstWhere(
+      (target) => target['id'] == 'p2',
+    );
+
+    expect(p2['x'], 345.0);
+    expect(p2['y'], 456.0);
   });
 
   testWidgets('Overlay interaction mode persists after saving settings', (
