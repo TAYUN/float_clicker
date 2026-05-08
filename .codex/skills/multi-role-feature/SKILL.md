@@ -50,23 +50,21 @@ description: Float Clicker 复杂功能、多阶段任务、跨 Flutter/Android 
 
 ## 本项目阶段边界提醒
 
-当前状态：P1 Flutter 多点模型与持久化已完成，推荐下一步是 P2 Flutter 多点页面。
+当前状态：P1 Flutter 多点模型与持久化、P2 Flutter 多点页面、P3 Android 多点 Overlay 均已完成；P4 通用手势执行与调度进行中，推荐下一步是 P4.1 通用动作和手势执行器。
 
-P2 只做：
+P4.1 只做：
 
-- 首页开放多点入口。
-- 新增多点模式页面。
-- 新增多点设置页面。
-- 接入 `MultiPointSettingsStore`。
-- 支持点位列表新增、删除、启用、禁用、排序。
-- 支持点击参数和悬浮交互模式配置。
-- Android 未接入前，页面应清楚提示悬浮和执行能力尚未完成。
+- 定义 `AutomationAction`，第一版只包含 tap 动作。
+- 新增或抽出 `AccessibilityGestureExecutor`。
+- 统一处理 `dispatchGesture()` 返回 false、完成、取消和无障碍服务断开。
+- 保持单点模式现有行为不回退。
+- 为 P4.2 多点调度器预留接口，但不直接接入多点 UI。
 
-P2 不做：
+P4.1 不做：
 
-- Android 多点 Overlay。
-- 多点真实悬浮层显示。
-- 多点真实点击调度。
+- 接入 `start/pause/resume/endMultiPointClicking` 的真实多点调度。
+- 实现 `MultiPointClickScheduler` 或轮次进度。
+- 调整多点页面暂停编辑语义。
 - 高级连招 UI。
 - 多配置 profile。
 - 多个悬浮执行控件。

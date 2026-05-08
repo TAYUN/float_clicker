@@ -114,8 +114,17 @@ float_clicker/android_permissions
 - `pauseSinglePointClicking`
 - `resumeSinglePointClicking`
 - `endSinglePointClicking`
+- `showMultiPointOverlay`
+- `hideMultiPointOverlay`
+- `getMultiPointOverlaySnapshot`
+- `updateMultiPointTargets`
+- `updateMultiPointOverlayUiSettings`
+- `startMultiPointClicking`
+- `pauseMultiPointClicking`
+- `resumeMultiPointClicking`
+- `endMultiPointClicking`
 
-多点后续将在同一平台服务中增加多点方法，具体以 `docs/需求文档/多点模式前置设计文档.md` 为准。
+多点 Overlay 方法已接入；多点执行方法当前进入 P4 调度阶段，P4.1 只抽取通用手势执行器，不直接接多点 UI。
 
 ## 5. 单点模式状态流
 
@@ -163,26 +172,28 @@ Flutter MultiPointSettingsStore
 
 ## 7. 多点当前架构边界
 
-P1 已完成 Flutter 数据层：
+已完成：
 
 - `MultiPointTarget`
 - `MultiPointSettings`
 - `MultiPointOverlayUiSettings`
 - `MultiPointSettingsStore`
 - `multi_point.targets_json`
-- 测试
+- Flutter 多点页面和设置页
+- Android 多点 Overlay、点位组件和控制组件复用
+- 点位和控制组件位置回传
+- 多点横竖屏边界、单点/多点互斥、权限撤销和窗口异常处理
 
-当前推荐下一步是 P2：Flutter 多点页面。
+当前推荐下一步是 P4.1：通用动作和手势执行器。
 
-P2 建设 Flutter 页面层：
+P4.1 只做：
 
-- 首页开放多点入口。
-- 多点模式页面。
-- 多点设置页面。
-- 点位列表编辑。
-- 点击参数和悬浮交互模式编辑。
+- `AutomationAction` tap 动作模型。
+- `AccessibilityGestureExecutor`。
+- 统一处理 `dispatchGesture()` 返回 false、完成、取消和服务断开。
+- 保持单点模式现有行为不回退。
 
-P2 不接 Android 多点 Overlay，不实现真实多点点击调度，不改变单点原生主链路。
+P4.1 不接入多点 UI，不实现 `MultiPointClickScheduler`、轮次进度或暂停编辑语义。
 
 ## 8. 后期多配置执行
 

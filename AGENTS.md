@@ -17,7 +17,10 @@ MethodChannel；Android 原生侧负责悬浮窗、无障碍点击、任务调�
 - 单点模式真机验收基本通过，后续改动必须保护单点回归。
 - 多点模式已完成需求讨论和阶段拆分。
 - P1：Flutter 多点模型与持久化已完成。
-- 当前推荐下一步是 P2：Flutter 多点页面。
+- P2：Flutter 多点页面已完成。
+- P3：Android 多点 Overlay 已完成，包含多点点位显示、控制组件复用、位置回传、横竖屏、互斥、权限撤销和窗口异常边界。
+- P4：通用手势执行与调度已进入进行中，已拆分为 P4.1-P4.4。
+- 当前推荐下一步是 P4.1：通用动作和手势执行器。
 
 ## 2. 必读文档
 
@@ -72,20 +75,19 @@ AI 交接提示词维护在：
 
 后期多配置执行以 `MultiPointProfile` 为核心，已经单独建档，不要混入当前 P1-P5。
 
-当前 P2 只做：
+当前 P4.1 只做：
 
-- 首页开放多点入口。
-- 新增多点模式页面。
-- 新增多点设置页面。
-- 接入 `MultiPointSettingsStore`。
-- 支持点位列表新增、删除、启用、禁用、排序。
-- 支持点击参数和悬浮交互模式配置。
+- 定义 `AutomationAction`，第一版只包含 tap 动作。
+- 新增或抽出 `AccessibilityGestureExecutor`。
+- 统一处理 `dispatchGesture()` 返回 false、完成、取消和无障碍服务断开。
+- 保持单点模式现有行为不回退。
+- 为 P4.2 多点调度器预留接口，但不直接接入多点 UI。
 
-当前 P2 不做：
+当前 P4.1 不做：
 
-- Android 多点 Overlay。
-- 多点真实悬浮层显示。
-- 多点真实点击调度。
+- `start/pause/resume/endMultiPointClicking` 真实调度接入。
+- `MultiPointClickScheduler` 或轮次进度。
+- 多点页面暂停编辑语义调整。
 - 多配置 profile。
 - 多个悬浮执行控件。
 

@@ -110,6 +110,8 @@ android/app/src/main/kotlin/com/example/float_clicker/
 - `FloatClickerAccessibilityService.kt`：无障碍手势执行。
 - `SinglePointOverlayManager.kt`：单点悬浮层管理。
 - `SinglePointClickScheduler.kt`：单点任务调度。
+- `MultiPointOverlayManager.kt`：多点悬浮层管理。
+- `MultiPointTargetOverlayComponent.kt`：多点编号点位组件。
 - `OverlayWindowHelper.kt`：悬浮窗 add/update/remove 安全封装和边界校正。
 - `TargetOverlayComponent.kt`
 - `ToolbarOverlayComponent.kt`
@@ -150,24 +152,24 @@ android/app/src/main/kotlin/com/example/float_clicker/
 ## 5. 当前多点阶段约束
 
 P1：Flutter 多点模型和持久化已经完成。
+P2：Flutter 多点页面已经完成。
+P3：Android 多点 Overlay 已经完成。
 
-当前推荐下一步是 P2：Flutter 多点页面。
+当前推荐下一步是 P4.1：通用动作和手势执行器。
 
-P2 包含：
+P4.1 包含：
 
-- 首页开放多点入口。
-- 新增多点模式页面。
-- 新增多点设置页面。
-- 接入 `MultiPointSettingsStore`。
-- 支持点位新增、删除、启用、禁用、排序。
-- 支持点击参数和悬浮交互模式配置。
-- Android 未接入前，悬浮层和执行操作要给出清楚的未完成提示。
+- 定义 `AutomationAction`，第一版只包含 tap 动作。
+- 新增或抽出 `AccessibilityGestureExecutor`。
+- 统一处理 `dispatchGesture()` 返回 false、完成、取消和无障碍服务断开。
+- 保持单点模式现有行为不回退。
+- 为 P4.2 多点调度器预留接口，但不直接接入多点 UI。
 
-P2 不包含：
+P4.1 不包含：
 
-- Android Overlay。
-- 多点真实悬浮层。
-- 多点真实点击调度。
+- `start/pause/resume/endMultiPointClicking` 真实多点调度接入。
+- `MultiPointClickScheduler` 或轮次进度。
+- 多点页面暂停编辑语义调整。
 - 高级连招 UI。
 - 多配置 profile。
 - 多个悬浮执行控件。
