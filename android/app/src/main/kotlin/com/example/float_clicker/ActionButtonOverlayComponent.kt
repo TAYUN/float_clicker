@@ -18,13 +18,18 @@ internal class ActionButtonOverlayComponent(
 ) {
     private var view: ActionButtonView? = null
     private var params: WindowManager.LayoutParams? = null
+    private var metrics = OverlayComponentMetrics(
+        overlayWindow,
+        OverlayAppearanceSettings(),
+    )
 
-    fun show(position: OverlayPoint, taskRunState: TaskRunState) {
+    fun show(position: OverlayPoint, taskRunState: TaskRunState, metrics: OverlayComponentMetrics) {
+        this.metrics = metrics
         if (view == null) {
             val actionButton = createView()
             val nextParams = overlayWindow.overlayParams(
-                width = overlayWindow.dp(42),
-                height = overlayWindow.dp(42),
+                width = metrics.actionButtonSizePx,
+                height = metrics.actionButtonSizePx,
                 position = position,
             )
             overlayWindow.bindDrag(
@@ -37,6 +42,8 @@ internal class ActionButtonOverlayComponent(
             overlayWindow.addView(actionButton, nextParams)
             view = actionButton
             params = nextParams
+        } else {
+            updateMetrics(metrics)
         }
 
         moveTo(position)
@@ -57,20 +64,29 @@ internal class ActionButtonOverlayComponent(
         params = null
     }
 
+    fun updateMetrics(metrics: OverlayComponentMetrics) {
+        this.metrics = metrics
+        val actionButton = view ?: return
+        val actionParams = params ?: return
+        actionParams.width = metrics.actionButtonSizePx
+        actionParams.height = metrics.actionButtonSizePx
+        actionButton.updateMetrics(metrics)
+        overlayWindow.updateViewLayout(actionButton, actionParams)
+    }
+
     private fun createView(): ActionButtonView {
-        return ActionButtonView(context, overlayWindow)
+        return ActionButtonView(context, metrics)
     }
 }
 
 private class ActionButtonView(
     context: Context,
-    private val overlayWindow: OverlayWindowHelper,
+    private var metrics: OverlayComponentMetrics,
 ) : View(context) {
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = OverlayColors.ACCENT
         style = Paint.Style.STROKE
-        strokeWidth = overlayWindow.dp(2).toFloat()
     }
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = OverlayColors.ACCENT
@@ -81,6 +97,7 @@ private class ActionButtonView(
     private var taskRunState = TaskRunState.IDLE
 
     init {
+        updateMetrics(metrics)
         isClickable = true
         contentDescription = taskActionContentDescription(taskRunState)
     }
@@ -92,6 +109,12 @@ private class ActionButtonView(
 
         taskRunState = value
         contentDescription = taskActionContentDescription(value)
+        invalidate()
+    }
+
+    fun updateMetrics(value: OverlayComponentMetrics) {
+        metrics = value
+        strokePaint.strokeWidth = metrics.actionButtonStrokePx.toFloat()
         invalidate()
     }
 
@@ -113,8 +136,8 @@ private class ActionButtonView(
     }
 
     private fun drawPlayIcon(canvas: Canvas, cx: Float, cy: Float) {
-        val iconWidth = overlayWindow.dp(11).toFloat()
-        val iconHeight = overlayWindow.dp(14).toFloat()
+        val iconWidth = metrics.actionPlayIconWidthPx.toFloat()
+        val iconHeight = metrics.actionPlayIconHeightPx.toFloat()
         // 三角形按字体绘制时容易显得偏左；这里用几何点位让视觉重心落在圆心附近。
         val left = cx - iconWidth * 0.34f
         val right = cx + iconWidth * 0.66f
@@ -130,10 +153,10 @@ private class ActionButtonView(
     }
 
     private fun drawPauseIcon(canvas: Canvas, cx: Float, cy: Float) {
-        val barWidth = overlayWindow.dp(3).toFloat()
-        val barHeight = overlayWindow.dp(13).toFloat()
-        val gap = overlayWindow.dp(3).toFloat()
-        val corner = overlayWindow.dp(1).toFloat()
+        val barWidth = metrics.actionPauseBarWidthPx.toFloat()
+        val barHeight = metrics.actionPauseBarHeightPx.toFloat()
+        val gap = metrics.actionPauseGapPx.toFloat()
+        val corner = metrics.actionPauseCornerPx.toFloat()
         val totalWidth = barWidth * 2 + gap
         val top = cy - barHeight / 2f
         val bottom = cy + barHeight / 2f

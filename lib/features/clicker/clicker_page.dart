@@ -76,6 +76,7 @@ class _ClickerPageState extends State<ClickerPage> with WidgetsBindingObserver {
           infiniteLoop: settings.infiniteLoop,
           tapDurationMs: settings.tapDurationMs,
           overlayUiSettings: _controller.overlayUiSettings,
+          appearanceSettings: _appearanceSettings,
         );
       } else {
         await _permissionService.hideSinglePointOverlay();
@@ -308,6 +309,9 @@ class _ClickerPageState extends State<ClickerPage> with WidgetsBindingObserver {
       );
       await _permissionService.updateSinglePointOverlayUiSettings(
         result.singlePointSettings.overlayUiSettings,
+      );
+      await _permissionService.updateGlobalOverlayAppearanceSettings(
+        result.appearanceSettings,
       );
     }
   }

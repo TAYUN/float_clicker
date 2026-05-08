@@ -10,13 +10,18 @@ internal class CollapsedToolbarComponent(
 ) {
     private var view: TextView? = null
     private var params: WindowManager.LayoutParams? = null
+    private var metrics = OverlayComponentMetrics(
+        overlayWindow,
+        OverlayAppearanceSettings(),
+    )
 
-    fun show(position: OverlayPoint) {
+    fun show(position: OverlayPoint, metrics: OverlayComponentMetrics) {
+        this.metrics = metrics
         if (view == null) {
             val collapsed = createView()
             val nextParams = overlayWindow.overlayParams(
-                width = overlayWindow.dp(44),
-                height = overlayWindow.dp(44),
+                width = metrics.collapsedToolbarSizePx,
+                height = metrics.collapsedToolbarSizePx,
                 position = position,
             )
             overlayWindow.bindDrag(
@@ -28,6 +33,8 @@ internal class CollapsedToolbarComponent(
             overlayWindow.addView(collapsed, nextParams)
             view = collapsed
             params = nextParams
+        } else {
+            updateMetrics(metrics)
         }
 
         moveTo(position)
@@ -43,7 +50,17 @@ internal class CollapsedToolbarComponent(
         params = null
     }
 
+    fun updateMetrics(metrics: OverlayComponentMetrics) {
+        this.metrics = metrics
+        val collapsed = view ?: return
+        val collapsedParams = params ?: return
+        collapsedParams.width = metrics.collapsedToolbarSizePx
+        collapsedParams.height = metrics.collapsedToolbarSizePx
+        collapsed.textSize = metrics.collapsedToolbarTextSizeSp
+        overlayWindow.updateViewLayout(collapsed, collapsedParams)
+    }
+
     private fun createView(): TextView {
-        return overlayWindow.floatingButton("≡", textSize = 24f) { onExpand() }
+        return overlayWindow.floatingButton("≡", textSize = metrics.collapsedToolbarTextSizeSp) { onExpand() }
     }
 }

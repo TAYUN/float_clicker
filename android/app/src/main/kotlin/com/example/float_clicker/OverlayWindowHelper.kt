@@ -96,12 +96,12 @@ internal class OverlayWindowHelper(
         updateViewLayout(view, params)
     }
 
-    fun coercePosition(position: OverlayPoint, widthDp: Int, heightDp: Int): OverlayPoint {
+    fun coercePositionPx(position: OverlayPoint, widthPx: Int, heightPx: Int): OverlayPoint {
         val bounds = overlayBoundsPx(view = null)
         val left = logicalPosition(bounds.left)
         val top = logicalPosition(bounds.top)
-        val maxX = logicalPosition((bounds.right - dp(widthDp)).coerceAtLeast(bounds.left))
-        val maxY = logicalPosition((bounds.bottom - dp(heightDp)).coerceAtLeast(bounds.top))
+        val maxX = logicalPosition((bounds.right - widthPx).coerceAtLeast(bounds.left))
+        val maxY = logicalPosition((bounds.bottom - heightPx).coerceAtLeast(bounds.top))
 
         return OverlayPoint(
             x = position.x.coerceIn(left, maxX),
@@ -219,6 +219,10 @@ internal class OverlayWindowHelper(
     }
 
     fun dp(value: Int): Int {
+        return (value * context.resources.displayMetrics.density).roundToInt()
+    }
+
+    fun dp(value: Float): Int {
         return (value * context.resources.displayMetrics.density).roundToInt()
     }
 

@@ -29,6 +29,8 @@ class SinglePointOverlayManager(
 
     private var taskStatus = SinglePointTaskStatus()
     private var interactionState = OverlayInteractionState()
+    private var appearanceSettings = OverlayAppearanceSettings()
+    private var metrics = OverlayComponentMetrics(overlay, appearanceSettings)
     private var isDisplayListenerRegistered = false
 
     // 当前配置保存在 overlay 管理器中。真正开始点击时会打包成 SinglePointClickRequest。
@@ -96,7 +98,7 @@ class SinglePointOverlayManager(
     fun show(settings: SinglePointOverlaySettings = SinglePointOverlaySettings()) {
         applySettings(settings)
         coerceInteractionStateToScreen()
-        targetComponent.show(interactionState.targetPosition)
+        targetComponent.show(interactionState.targetPosition, metrics)
         ensureDisplayListener()
         refreshInteractionViews()
     }
@@ -118,6 +120,13 @@ class SinglePointOverlayManager(
     fun updateInteractionState(state: OverlayInteractionState) {
         interactionState = state
         coerceInteractionStateToScreen()
+        refreshInteractionViews()
+    }
+
+    fun updateAppearanceSettings(settings: OverlayAppearanceSettings) {
+        appearanceSettings = settings.normalized
+        metrics = OverlayComponentMetrics(overlay, appearanceSettings)
+        // 外观缩放只改变 view 尺寸和内部图标，不改变任务进度，也不重写用户保存的逻辑坐标。
         refreshInteractionViews()
     }
 
@@ -210,6 +219,8 @@ class SinglePointOverlayManager(
         infiniteLoop = settings.infiniteLoop
         tapDurationMs = settings.tapDurationMs.coerceAtLeast(1)
         interactionState = settings.interactionState
+        appearanceSettings = settings.appearanceSettings.normalized
+        metrics = OverlayComponentMetrics(overlay, appearanceSettings)
     }
 
     private fun handleSchedulerStatusChanged(status: SinglePointTaskStatus) {
@@ -225,6 +236,7 @@ class SinglePointOverlayManager(
         }
 
         coerceInteractionStateToScreen()
+        targetComponent.updateMetrics(metrics)
         targetComponent.moveTo(interactionState.targetPosition)
 
         if (interactionState.shouldShowToolbar()) {
@@ -232,19 +244,20 @@ class SinglePointOverlayManager(
                 position = interactionState.toolbarPosition,
                 taskRunState = taskStatus.taskRunState,
                 canCollapse = interactionState.interactionMode == OverlayInteractionMode.COMPACT,
+                metrics = metrics,
             )
         } else {
             toolbarComponent.remove()
         }
 
         if (interactionState.shouldShowCollapsedToolbar()) {
-            collapsedToolbarComponent.show(interactionState.collapsedToolbarPosition)
+            collapsedToolbarComponent.show(interactionState.collapsedToolbarPosition, metrics)
         } else {
             collapsedToolbarComponent.remove()
         }
 
         if (interactionState.shouldShowActionButton()) {
-            actionButtonComponent.show(interactionState.actionButtonPosition, taskStatus.taskRunState)
+            actionButtonComponent.show(interactionState.actionButtonPosition, taskStatus.taskRunState, metrics)
         } else {
             actionButtonComponent.remove()
         }
@@ -286,17 +299,25 @@ class SinglePointOverlayManager(
 
     private fun coerceInteractionStateToScreen() {
         val coercedState = interactionState.copy(
-            targetPosition = overlay.coercePosition(interactionState.targetPosition, widthDp = 38, heightDp = 38),
-            toolbarPosition = overlay.coercePosition(interactionState.toolbarPosition, widthDp = 42, heightDp = 136),
-            collapsedToolbarPosition = overlay.coercePosition(
-                interactionState.collapsedToolbarPosition,
-                widthDp = 44,
-                heightDp = 44,
+            targetPosition = overlay.coercePositionPx(
+                interactionState.targetPosition,
+                widthPx = metrics.targetSizePx,
+                heightPx = metrics.targetSizePx,
             ),
-            actionButtonPosition = overlay.coercePosition(
+            toolbarPosition = overlay.coercePositionPx(
+                interactionState.toolbarPosition,
+                widthPx = metrics.toolbarWidthPx,
+                heightPx = metrics.toolbarEstimatedHeightPx,
+            ),
+            collapsedToolbarPosition = overlay.coercePositionPx(
+                interactionState.collapsedToolbarPosition,
+                widthPx = metrics.collapsedToolbarSizePx,
+                heightPx = metrics.collapsedToolbarSizePx,
+            ),
+            actionButtonPosition = overlay.coercePositionPx(
                 interactionState.actionButtonPosition,
-                widthDp = 42,
-                heightDp = 42,
+                widthPx = metrics.actionButtonSizePx,
+                heightPx = metrics.actionButtonSizePx,
             ),
         )
 
@@ -364,4 +385,5 @@ data class SinglePointOverlaySettings(
     val infiniteLoop: Boolean = false,
     val tapDurationMs: Int = 50,
     val interactionState: OverlayInteractionState = OverlayInteractionState(),
+    val appearanceSettings: OverlayAppearanceSettings = OverlayAppearanceSettings(),
 )

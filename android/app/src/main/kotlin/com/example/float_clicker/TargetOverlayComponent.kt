@@ -14,20 +14,26 @@ internal class TargetOverlayComponent(
 ) {
     private var view: View? = null
     private var params: WindowManager.LayoutParams? = null
+    private var metrics = OverlayComponentMetrics(
+        overlayWindow,
+        OverlayAppearanceSettings(),
+    )
 
     val isShowing: Boolean
         get() = view != null
 
-    fun show(position: OverlayPoint) {
+    fun show(position: OverlayPoint, metrics: OverlayComponentMetrics) {
+        this.metrics = metrics
         if (view != null) {
+            updateLayoutSize(metrics.targetSizePx, metrics.targetSizePx)
             moveTo(position)
             return
         }
 
         val target = createView()
         val nextParams = overlayWindow.overlayParams(
-            width = overlayWindow.dp(38),
-            height = overlayWindow.dp(38),
+            width = metrics.targetSizePx,
+            height = metrics.targetSizePx,
             position = position,
         )
         overlayWindow.bindDrag(
@@ -42,6 +48,18 @@ internal class TargetOverlayComponent(
 
     fun moveTo(position: OverlayPoint) {
         overlayWindow.moveTo(view, params, position)
+    }
+
+    fun updateMetrics(metrics: OverlayComponentMetrics) {
+        this.metrics = metrics
+        val target = view ?: return
+        target.background = outerBackground()
+        val inner = (target as? LinearLayout)?.getChildAt(0) ?: return
+        inner.layoutParams = LinearLayout.LayoutParams(
+            metrics.targetInnerDotSizePx,
+            metrics.targetInnerDotSizePx,
+        )
+        updateLayoutSize(metrics.targetSizePx, metrics.targetSizePx)
     }
 
     fun setTouchable(isTouchable: Boolean) {
@@ -74,11 +92,6 @@ internal class TargetOverlayComponent(
     }
 
     private fun createView(): View {
-        val outer = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(OverlayColors.ACCENT_SOFT)
-            setStroke(overlayWindow.dp(3), OverlayColors.ACCENT)
-        }
         val inner = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(OverlayColors.ACCENT)
@@ -86,12 +99,28 @@ internal class TargetOverlayComponent(
 
         return LinearLayout(context).apply {
             gravity = Gravity.CENTER
-            background = outer
+            background = outerBackground()
             alpha = 0.94f
             addView(
                 View(context).apply { background = inner },
-                LinearLayout.LayoutParams(overlayWindow.dp(8), overlayWindow.dp(8)),
+                LinearLayout.LayoutParams(metrics.targetInnerDotSizePx, metrics.targetInnerDotSizePx),
             )
         }
+    }
+
+    private fun outerBackground(): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(OverlayColors.ACCENT_SOFT)
+            setStroke(metrics.targetStrokePx, OverlayColors.ACCENT)
+        }
+    }
+
+    private fun updateLayoutSize(width: Int, height: Int) {
+        val target = view ?: return
+        val targetParams = params ?: return
+        targetParams.width = width
+        targetParams.height = height
+        overlayWindow.updateViewLayout(target, targetParams)
     }
 }

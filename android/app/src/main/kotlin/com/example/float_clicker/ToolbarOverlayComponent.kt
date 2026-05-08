@@ -21,13 +21,23 @@ internal class ToolbarOverlayComponent(
     private var view: LinearLayout? = null
     private var params: WindowManager.LayoutParams? = null
     private var canCollapse = false
+    private var metrics = OverlayComponentMetrics(
+        overlayWindow,
+        OverlayAppearanceSettings(),
+    )
 
-    fun show(position: OverlayPoint, taskRunState: TaskRunState, canCollapse: Boolean) {
+    fun show(
+        position: OverlayPoint,
+        taskRunState: TaskRunState,
+        canCollapse: Boolean,
+        metrics: OverlayComponentMetrics,
+    ) {
         this.canCollapse = canCollapse
+        this.metrics = metrics
         if (view == null) {
             val toolbar = createView()
             val nextParams = overlayWindow.overlayParams(
-                width = overlayWindow.dp(42),
+                width = metrics.toolbarWidthPx,
                 height = WindowManager.LayoutParams.WRAP_CONTENT,
                 position = position,
             )
@@ -41,6 +51,8 @@ internal class ToolbarOverlayComponent(
             overlayWindow.addView(toolbar, nextParams)
             view = toolbar
             params = nextParams
+        } else {
+            updateMetrics(metrics)
         }
 
         moveTo(position)
@@ -55,9 +67,10 @@ internal class ToolbarOverlayComponent(
         val toolbar = view ?: return
         (toolbar.getChildAt(1) as? TextView)?.apply {
             text = taskActionText(taskRunState)
-            textSize = taskActionTextSize(taskRunState)
+            textSize = taskActionTextSize(taskRunState, metrics)
             contentDescription = taskActionContentDescription(taskRunState)
             setButtonBackground(this, taskActionBackgroundColor(taskRunState))
+            layoutParams = LinearLayout.LayoutParams(metrics.toolbarButtonWidthPx, metrics.toolbarButtonHeightPx)
         }
     }
 
@@ -67,30 +80,47 @@ internal class ToolbarOverlayComponent(
         params = null
     }
 
-    private fun createView(): LinearLayout {
-        val background = GradientDrawable().apply {
-            cornerRadius = overlayWindow.dp(15).toFloat()
-            setColor(OverlayColors.PANEL)
-        }
+    fun updateMetrics(metrics: OverlayComponentMetrics) {
+        this.metrics = metrics
+        val toolbar = view ?: return
+        val toolbarParams = params ?: return
+        toolbarParams.width = metrics.toolbarWidthPx
+        toolbar.background = toolbarBackground()
+        toolbar.setPadding(
+            metrics.toolbarPaddingHorizontalPx,
+            metrics.toolbarPaddingVerticalPx,
+            metrics.toolbarPaddingHorizontalPx,
+            metrics.toolbarPaddingVerticalPx,
+        )
+        toolbar.elevation = metrics.toolbarElevationPx.toFloat()
+        updateStaticButtonStyle(toolbar)
+        overlayWindow.updateViewLayout(toolbar, toolbarParams)
+    }
 
+    private fun createView(): LinearLayout {
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(overlayWindow.dp(3), overlayWindow.dp(4), overlayWindow.dp(3), overlayWindow.dp(4))
-            this.background = background
-            elevation = overlayWindow.dp(8).toFloat()
+            setPadding(
+                metrics.toolbarPaddingHorizontalPx,
+                metrics.toolbarPaddingVerticalPx,
+                metrics.toolbarPaddingHorizontalPx,
+                metrics.toolbarPaddingVerticalPx,
+            )
+            this.background = toolbarBackground()
+            elevation = metrics.toolbarElevationPx.toFloat()
 
-            addView(toolbarButton("✥", textSize = 20f, contentDescription = "移动控制条", onClick = null))
-            addView(toolbarButton("▶", textSize = 19f, contentDescription = "开始点击") { onTaskAction() })
+            addView(toolbarButton("✥", textSize = metrics.toolbarDragTextSizeSp, contentDescription = "移动控制条", onClick = null))
+            addView(toolbarButton("▶", textSize = metrics.toolbarTaskTextSizeSp, contentDescription = "开始点击") { onTaskAction() })
             addView(
                 toolbarButton(
                     "■",
-                    textSize = 15f,
+                    textSize = metrics.toolbarEndTextSizeSp,
                     contentDescription = "结束任务",
                     textColor = OverlayColors.DANGER,
                 ) { onEndTask() },
             )
-            addView(toolbarButton("×", textSize = 20f, contentDescription = "关闭单点模式") { onClose() })
+            addView(toolbarButton("×", textSize = metrics.toolbarCloseTextSizeSp, contentDescription = "关闭单点模式") { onClose() })
         }
     }
 
@@ -118,7 +148,7 @@ internal class ToolbarOverlayComponent(
                     onClick()
                 }
             }
-            layoutParams = LinearLayout.LayoutParams(overlayWindow.dp(34), overlayWindow.dp(32))
+            layoutParams = LinearLayout.LayoutParams(metrics.toolbarButtonWidthPx, metrics.toolbarButtonHeightPx)
         }
     }
 
@@ -130,9 +160,31 @@ internal class ToolbarOverlayComponent(
 
     private fun setButtonBackground(button: TextView, color: Int) {
         button.background = GradientDrawable().apply {
-            cornerRadius = overlayWindow.dp(11).toFloat()
+            cornerRadius = metrics.toolbarButtonCornerRadiusPx.toFloat()
             setColor(color)
-            setStroke(overlayWindow.dp(1), OverlayColors.ACCENT)
+            setStroke(metrics.toolbarButtonStrokePx, OverlayColors.ACCENT)
+        }
+    }
+
+    private fun toolbarBackground(): GradientDrawable {
+        return GradientDrawable().apply {
+            cornerRadius = metrics.toolbarCornerRadiusPx.toFloat()
+            setColor(OverlayColors.PANEL)
+        }
+    }
+
+    private fun updateStaticButtonStyle(toolbar: LinearLayout) {
+        (toolbar.getChildAt(0) as? TextView)?.apply {
+            textSize = metrics.toolbarDragTextSizeSp
+            layoutParams = LinearLayout.LayoutParams(metrics.toolbarButtonWidthPx, metrics.toolbarButtonHeightPx)
+        }
+        (toolbar.getChildAt(2) as? TextView)?.apply {
+            textSize = metrics.toolbarEndTextSizeSp
+            layoutParams = LinearLayout.LayoutParams(metrics.toolbarButtonWidthPx, metrics.toolbarButtonHeightPx)
+        }
+        (toolbar.getChildAt(3) as? TextView)?.apply {
+            textSize = metrics.toolbarCloseTextSizeSp
+            layoutParams = LinearLayout.LayoutParams(metrics.toolbarButtonWidthPx, metrics.toolbarButtonHeightPx)
         }
     }
 }
@@ -145,11 +197,14 @@ internal fun taskActionText(taskRunState: TaskRunState): String {
     }
 }
 
-internal fun taskActionTextSize(taskRunState: TaskRunState): Float {
+internal fun taskActionTextSize(
+    taskRunState: TaskRunState,
+    metrics: OverlayComponentMetrics,
+): Float {
     return when (taskRunState) {
         TaskRunState.IDLE,
-        TaskRunState.PAUSED -> 19f
-        TaskRunState.RUNNING -> 16f
+        TaskRunState.PAUSED -> metrics.toolbarTaskTextSizeSp
+        TaskRunState.RUNNING -> metrics.toolbarPauseTextSizeSp
     }
 }
 

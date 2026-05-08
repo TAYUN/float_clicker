@@ -123,6 +123,10 @@ class MainActivity : FlutterActivity() {
                     singlePointOverlayManager.updateInteractionState(overlayInteractionStateFrom(call.arguments))
                     result.success(null)
                 }
+                "updateGlobalOverlayAppearanceSettings" -> {
+                    singlePointOverlayManager.updateAppearanceSettings(overlayAppearanceSettingsFrom(call.arguments))
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -163,7 +167,16 @@ class MainActivity : FlutterActivity() {
             infiniteLoop = map["infiniteLoop"] as? Boolean ?: false,
             tapDurationMs = (map["tapDurationMs"] as? Number)?.toInt() ?: 50,
             interactionState = overlayInteractionStateFrom(arguments),
+            appearanceSettings = overlayAppearanceSettingsFrom(arguments),
         )
+    }
+
+    private fun overlayAppearanceSettingsFrom(arguments: Any?): OverlayAppearanceSettings {
+        val map = arguments as? Map<*, *> ?: return OverlayAppearanceSettings()
+        return OverlayAppearanceSettings(
+            controlScale = (map["overlayControlScale"] as? Number)?.toFloat()
+                ?: OverlayAppearanceSettings.DEFAULT_SCALE,
+        ).normalized
     }
 
     private fun overlayInteractionStateFrom(arguments: Any?): OverlayInteractionState {

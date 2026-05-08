@@ -181,6 +181,9 @@ void main() {
             nativeOverlaySettings = _objectMap(call.arguments);
             return null;
           }
+          if (call.method == 'updateGlobalOverlayAppearanceSettings') {
+            return null;
+          }
           return null;
         });
   });
@@ -375,6 +378,38 @@ void main() {
     expect(
       (overlayUpdateCall.arguments as Map<Object?, Object?>)['interactionMode'],
       'normal',
+    );
+
+    final appearanceUpdateCall = methodCalls.lastWhere(
+      (call) => call.method == 'updateGlobalOverlayAppearanceSettings',
+    );
+    expect(
+      (appearanceUpdateCall.arguments
+          as Map<Object?, Object?>)['overlayControlScale'],
+      1.0,
+    );
+  });
+
+  testWidgets('Opening single point overlay sends global control scale', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      GlobalOverlayAppearanceStore.overlayControlScaleKey: 1.25,
+    });
+
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tester.tap(find.text('单点模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开启单点模式'));
+    await tester.pumpAndSettle();
+
+    final showCall = methodCalls.lastWhere(
+      (call) => call.method == 'showSinglePointOverlay',
+    );
+    expect(
+      (showCall.arguments as Map<Object?, Object?>)['overlayControlScale'],
+      1.25,
     );
   });
 

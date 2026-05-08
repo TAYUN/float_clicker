@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../settings/global_overlay_appearance_settings.dart';
 import '../../features/clicker/clicker_settings.dart';
 
 typedef SinglePointOverlayStateChanged =
@@ -149,6 +150,8 @@ class AndroidPermissionService {
     required bool infiniteLoop,
     required int tapDurationMs,
     OverlayUiSettings overlayUiSettings = OverlayUiSettings.defaults,
+    GlobalOverlayAppearanceSettings appearanceSettings =
+        GlobalOverlayAppearanceSettings.defaults,
   }) async {
     // 这些配置会被 Android 的 SinglePointOverlayManager 保存，
     // 点击时再交给 SinglePointClickScheduler 生成每次点击请求。
@@ -160,6 +163,7 @@ class AndroidPermissionService {
         'infiniteLoop': infiniteLoop,
         'tapDurationMs': tapDurationMs,
         ..._overlayUiSettingsArguments(overlayUiSettings),
+        ..._globalOverlayAppearanceArguments(appearanceSettings),
       },
     );
   }
@@ -206,6 +210,16 @@ class AndroidPermissionService {
     await _invokeAndroidOnly(
       'updateSinglePointOverlayUiSettings',
       arguments: _overlayUiSettingsArguments(settings),
+      ignoreMissingPlugin: true,
+    );
+  }
+
+  Future<void> updateGlobalOverlayAppearanceSettings(
+    GlobalOverlayAppearanceSettings settings,
+  ) async {
+    await _invokeAndroidOnly(
+      'updateGlobalOverlayAppearanceSettings',
+      arguments: _globalOverlayAppearanceArguments(settings),
       ignoreMissingPlugin: true,
     );
   }
@@ -284,6 +298,16 @@ class AndroidPermissionService {
       'actionButtonPositionX': settings.actionButtonPositionX,
       'actionButtonPositionY': settings.actionButtonPositionY,
       'isToolbarCollapsed': settings.isToolbarCollapsed,
+    };
+  }
+
+  Map<String, Object?> _globalOverlayAppearanceArguments(
+    GlobalOverlayAppearanceSettings settings,
+  ) {
+    return {
+      'overlayControlScale': GlobalOverlayAppearanceSettings.normalizeScale(
+        settings.overlayControlScale,
+      ),
     };
   }
 
