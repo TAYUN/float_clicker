@@ -410,10 +410,11 @@ void main() {
     final showCall = methodCalls.lastWhere(
       (call) => call.method == 'showSinglePointOverlay',
     );
-    expect(
-      (showCall.arguments as Map<Object?, Object?>)['overlayControlScale'],
-      closeTo(1.2, 0.001),
-    );
+    final arguments = showCall.arguments as Map<Object?, Object?>;
+    expect(arguments['overlayControlScale'], closeTo(1.2, 0.001));
+    expect(arguments['targetPointScale'], closeTo(1.1, 0.001));
+    expect(arguments['toolbarScale'], closeTo(1.2, 0.001));
+    expect(arguments['actionButtonScale'], closeTo(1.3, 0.001));
   });
 
   testWidgets('Saving global settings syncs native overlay appearance', (
@@ -431,11 +432,11 @@ void main() {
     final appearanceUpdateCall = methodCalls.lastWhere(
       (call) => call.method == 'updateGlobalOverlayAppearanceSettings',
     );
-    expect(
-      (appearanceUpdateCall.arguments
-          as Map<Object?, Object?>)['overlayControlScale'],
-      greaterThan(1.0),
-    );
+    final arguments = appearanceUpdateCall.arguments as Map<Object?, Object?>;
+    expect(arguments['overlayControlScale'], greaterThan(1.0));
+    expect(arguments['targetPointScale'], 1.0);
+    expect(arguments['toolbarScale'], 1.0);
+    expect(arguments['actionButtonScale'], greaterThan(1.0));
   });
 
   testWidgets('Native finished event resets single point running UI', (

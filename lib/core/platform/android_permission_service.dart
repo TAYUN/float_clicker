@@ -305,8 +305,18 @@ class AndroidPermissionService {
     GlobalOverlayAppearanceSettings settings,
   ) {
     return {
+      // overlayControlScale 保留给旧 Android 端兼容；新端优先读取下面三个分组件比例。
       'overlayControlScale': GlobalOverlayAppearanceSettings.normalizeScale(
         settings.overlayControlScale,
+      ),
+      'targetPointScale': GlobalOverlayAppearanceSettings.normalizeScale(
+        settings.targetPointScale,
+      ),
+      'toolbarScale': GlobalOverlayAppearanceSettings.normalizeScale(
+        settings.toolbarScale,
+      ),
+      'actionButtonScale': GlobalOverlayAppearanceSettings.normalizeScale(
+        settings.actionButtonScale,
       ),
     };
   }

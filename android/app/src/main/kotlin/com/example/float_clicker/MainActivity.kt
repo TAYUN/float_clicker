@@ -173,9 +173,13 @@ class MainActivity : FlutterActivity() {
 
     private fun overlayAppearanceSettingsFrom(arguments: Any?): OverlayAppearanceSettings {
         val map = arguments as? Map<*, *> ?: return OverlayAppearanceSettings()
+        val legacyScale = (map["overlayControlScale"] as? Number)?.toFloat()
+            ?: OverlayAppearanceSettings.DEFAULT_SCALE
+        // overlayControlScale 是旧协议的单比例字段；新协议缺某个分项时仍用它补齐，避免版本交错时尺寸回到默认值。
         return OverlayAppearanceSettings(
-            controlScale = (map["overlayControlScale"] as? Number)?.toFloat()
-                ?: OverlayAppearanceSettings.DEFAULT_SCALE,
+            targetPointScale = (map["targetPointScale"] as? Number)?.toFloat() ?: legacyScale,
+            toolbarScale = (map["toolbarScale"] as? Number)?.toFloat() ?: legacyScale,
+            actionButtonScale = (map["actionButtonScale"] as? Number)?.toFloat() ?: legacyScale,
         ).normalized
     }
 
