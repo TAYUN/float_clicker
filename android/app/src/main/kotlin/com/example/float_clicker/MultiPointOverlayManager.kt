@@ -4,24 +4,12 @@ import android.content.Context
 import android.view.WindowManager
 
 internal class MultiPointOverlayManager(
-    context: Context,
+    private val context: Context,
     private val onOverlayStateChanged: (MultiPointOverlaySnapshot) -> Unit = {},
 ) {
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val overlay = OverlayWindowHelper(context, windowManager)
-    private val targetComponent = MultiPointTargetOverlayComponent(
-        context = context,
-        overlayWindow = overlay,
-    ) { targetId, point ->
-        targets = targets.map { target ->
-            if (target.id == targetId) {
-                target.copy(x = point.x, y = point.y)
-            } else {
-                target
-            }
-        }
-        notifyOverlayStateChanged()
-    }
+    private val targetComponents = mutableMapOf<String, MultiPointTargetOverlayComponent>()
 
     private var overlayUiState = MultiPointOverlayUiState()
     private var appearanceSettings = OverlayAppearanceSettings()
@@ -43,27 +31,14 @@ internal class MultiPointOverlayManager(
     fun show(settings: MultiPointOverlaySettings = MultiPointOverlaySettings()): Boolean {
         applySettings(settings)
         isModeEnabled = true
-        val firstEnabledTarget = targets.firstOrNull { it.enabled }
-        if (firstEnabledTarget == null) {
-            // 允许所有点位禁用；此时多点模式开启，但悬浮层不显示目标点，执行前由 Flutter/调度器拒绝。
-            targetComponent.remove()
-            notifyOverlayStateChanged()
-            return true
-        }
-
-        // P3.2 只验证单个编号点位组件；多个点位统一管理留到 P3.3。
-        targetComponent.show(
-            target = firstEnabledTarget,
-            displayIndex = 1,
-            metrics = metrics,
-        )
+        refreshTargetComponents()
         notifyOverlayStateChanged()
-        return targetComponent.isShowing
+        return targets.none { it.enabled } || targetComponents.isNotEmpty()
     }
 
     fun hide() {
         isModeEnabled = false
-        targetComponent.remove()
+        removeAllTargetComponents()
         notifyOverlayStateChanged()
     }
 
@@ -90,7 +65,9 @@ internal class MultiPointOverlayManager(
     fun updateAppearanceSettings(settings: OverlayAppearanceSettings) {
         appearanceSettings = settings.normalized
         metrics = OverlayComponentMetrics(overlay, appearanceSettings)
-        targetComponent.updateMetrics(metrics)
+        if (isModeEnabled) {
+            refreshTargetComponents()
+        }
         notifyOverlayStateChanged()
     }
 
@@ -103,6 +80,48 @@ internal class MultiPointOverlayManager(
 
     private fun notifyOverlayStateChanged() {
         onOverlayStateChanged(snapshot)
+    }
+
+    private fun refreshTargetComponents() {
+        val enabledTargets = targets.filter { it.enabled }
+        val enabledIds = enabledTargets.map { it.id }.toSet()
+        val removedIds = targetComponents.keys - enabledIds
+
+        for (removedId in removedIds) {
+            targetComponents.remove(removedId)?.remove()
+        }
+
+        enabledTargets.forEachIndexed { index, target ->
+            val component = targetComponents.getOrPut(target.id) {
+                MultiPointTargetOverlayComponent(
+                    context = context,
+                    overlayWindow = overlay,
+                    onPositionChanged = ::handleTargetPositionChanged,
+                )
+            }
+            // 悬浮层编号按启用点位连续显示，不直接使用完整列表 order。
+            component.show(
+                target = target,
+                displayIndex = index + 1,
+                metrics = metrics,
+            )
+        }
+    }
+
+    private fun removeAllTargetComponents() {
+        targetComponents.values.forEach { component -> component.remove() }
+        targetComponents.clear()
+    }
+
+    private fun handleTargetPositionChanged(targetId: String, point: OverlayPoint) {
+        targets = targets.map { target ->
+            if (target.id == targetId) {
+                target.copy(x = point.x, y = point.y)
+            } else {
+                target
+            }
+        }
+        notifyOverlayStateChanged()
     }
 
     private fun normalizedTargets(nextTargets: List<MultiPointTargetState>): List<MultiPointTargetState> {
