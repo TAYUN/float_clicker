@@ -4,6 +4,7 @@ import 'core/theme/app_theme.dart';
 import 'features/clicker/clicker_guide_page.dart';
 import 'features/clicker/clicker_page.dart';
 import 'features/home/home_page.dart';
+import 'features/multi_point/multi_point_page.dart';
 import 'features/settings/global_settings_page.dart';
 
 class FloatClickerApp extends StatelessWidget {
@@ -21,6 +22,7 @@ class FloatClickerApp extends StatelessWidget {
         GlobalSettingsPage.routeName: (_) => const GlobalSettingsPage(),
         ClickerPage.routeName: (_) => const ClickerPage(),
         ClickerGuidePage.routeName: (_) => const ClickerGuidePage(),
+        MultiPointPage.routeName: (_) => const MultiPointPage(),
       },
     );
   }

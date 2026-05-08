@@ -255,6 +255,89 @@ void main() {
     expect(find.text('间隔 900 ms，次数 4，普通模式'), findsOneWidget);
   });
 
+  testWidgets('Home navigates to multi point mode with default targets', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+
+    expect(find.text('多点模式'), findsOneWidget);
+    expect(find.text('点位列表'), findsOneWidget);
+    expect(find.text('点位 1'), findsOneWidget);
+    expect(find.text('点位 2'), findsOneWidget);
+    expect(find.text('开启多点编辑'), findsOneWidget);
+    expect(find.text('间隔 500 ms，循环 10 轮，普通模式'), findsOneWidget);
+  });
+
+  testWidgets('Multi point target edits persist after leaving page', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+
+    await tester.tap(find.byTooltip('新增点位'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('点位 3'), findsOneWidget);
+
+    await tester.tap(find.byType(Switch).at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('删除点位').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('点位 3'), findsNothing);
+    expect(find.textContaining('禁用'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tapVisibleText(tester, '多点模式');
+
+    expect(find.text('点位 1'), findsOneWidget);
+    expect(find.text('点位 2'), findsOneWidget);
+    expect(find.textContaining('禁用'), findsOneWidget);
+  });
+
+  testWidgets('Multi point settings are saved back to mode page', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(EditableText).at(0), '650');
+    await tester.enterText(find.byType(EditableText).at(1), '75');
+    await tester.enterText(find.byType(EditableText).at(2), '4');
+    await tapVisibleText(tester, '极简模式');
+    await tapVisibleText(tester, '保存');
+
+    expect(find.text('间隔 650 ms，循环 4 轮，极简模式'), findsOneWidget);
+  });
+
+  testWidgets('Multi point task rejects execution without enabled targets', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+
+    await tester.tap(find.byType(Switch).at(0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch).at(1));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('开启多点编辑'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    await tapVisibleText(tester, '执行任务');
+
+    expect(find.text('请至少启用 1 个点位后再执行。'), findsOneWidget);
+  });
+
   testWidgets('Overlay interaction mode persists after saving settings', (
     tester,
   ) async {

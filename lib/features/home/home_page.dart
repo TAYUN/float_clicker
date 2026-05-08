@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/platform/android_permission_service.dart';
 import '../clicker/clicker_settings.dart';
 import '../clicker/clicker_page.dart';
+import '../multi_point/multi_point_page.dart';
 import '../settings/global_settings_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -155,11 +156,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   Navigator.of(context).pushNamed(ClickerPage.routeName),
             ),
             const SizedBox(height: 12),
-            const _ModeTile(
+            _ModeTile(
               icon: Icons.control_point_duplicate,
               title: '多点模式',
-              subtitle: '多个点击点按顺序执行，后续开发',
-              trailing: _ComingSoonPill(),
+              subtitle: '编辑多个点击点，按顺序执行的基础配置',
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () =>
+                  Navigator.of(context).pushNamed(MultiPointPage.routeName),
             ),
           ],
         ),
@@ -316,24 +319,6 @@ class _ModeTile extends StatelessWidget {
         subtitle: Text(subtitle),
         trailing: trailing,
         onTap: onTap,
-      ),
-    );
-  }
-}
-
-class _ComingSoonPill extends StatelessWidget {
-  const _ComingSoonPill();
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Text('开发中'),
       ),
     );
   }
