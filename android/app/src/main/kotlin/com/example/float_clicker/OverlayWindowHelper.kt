@@ -18,6 +18,17 @@ import android.widget.TextView
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+internal object OverlayColors {
+    const val PANEL = 0xEC24272B.toInt()
+    const val PANEL_PRESSED = 0xF0323740.toInt()
+    const val ACCENT = 0xFF1976D2.toInt()
+    const val ACCENT_SOFT = 0x331976D2
+    const val DANGER = 0xFFFF8A80.toInt()
+    const val DANGER_SOFT = 0x26FF5252
+    const val TEXT_PRIMARY = 0xFFFFFFFF.toInt()
+    const val TEXT_MUTED = 0xCCFFFFFF.toInt()
+}
+
 internal class OverlayWindowHelper(
     private val context: Context,
     private val windowManager: WindowManager,
@@ -119,6 +130,7 @@ internal class OverlayWindowHelper(
                 MotionEvent.ACTION_DOWN -> {
                     // 横竖屏或系统栏显隐后 params 可能仍是旧边界下的值；按当前可拖动区域收回边界。
                     coerceParamsToVisibleBounds(touchedView.rootView, params)
+                    touchedView.isPressed = true
                     // rawX/rawY 是屏幕坐标；params.x/y 是 overlay 左上角坐标。
                     startRawX = event.rawX
                     startRawY = event.rawY
@@ -152,21 +164,26 @@ internal class OverlayWindowHelper(
                     true
                 }
                 MotionEvent.ACTION_UP -> {
+                    touchedView.isPressed = false
                     longPressRunnable?.let { touchedView.removeCallbacks(it) }
                     if (!moved) {
                         if (longPressed) {
                             // 长按已经消费本次手势，松手时不能再补一次单击。
                         } else if (onClick == null) {
+                            touchedView.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             touchedView.performClick()
                         } else {
+                            touchedView.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             onClick()
                         }
                     } else {
-                        onPositionChanged(OverlayPoint(x = logicalPosition(params.x), y = logicalPosition(params.y)))
+                        touchedView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        notifyPositionChanged(params, onPositionChanged)
                     }
                     true
                 }
                 MotionEvent.ACTION_CANCEL -> {
+                    touchedView.isPressed = false
                     longPressRunnable?.let { touchedView.removeCallbacks(it) }
                     true
                 }
@@ -175,10 +192,15 @@ internal class OverlayWindowHelper(
         }
     }
 
-    fun floatingButton(text: String, textSize: Float, onClick: () -> Unit): TextView {
+    fun floatingButton(
+        text: String,
+        textSize: Float,
+        backgroundColor: Int = OverlayColors.PANEL,
+        onClick: () -> Unit,
+    ): TextView {
         val background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(Color.argb(236, 36, 39, 43))
+            setColor(backgroundColor)
         }
 
         return TextView(context).apply {
@@ -187,6 +209,8 @@ internal class OverlayWindowHelper(
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
+            includeFontPadding = false
+            maxLines = 1
             this.background = background
             elevation = dp(8).toFloat()
             isClickable = true
@@ -201,6 +225,13 @@ internal class OverlayWindowHelper(
     private fun dpPosition(value: Int): Int {
         // Flutter 持久化的是逻辑像素；WindowManager 需要真实屏幕像素。
         return dp(value)
+    }
+
+    private fun notifyPositionChanged(
+        params: WindowManager.LayoutParams,
+        onPositionChanged: (OverlayPoint) -> Unit,
+    ) {
+        onPositionChanged(OverlayPoint(x = logicalPosition(params.x), y = logicalPosition(params.y)))
     }
 
     private fun coerceParamsToVisibleBounds(view: View, params: WindowManager.LayoutParams) {

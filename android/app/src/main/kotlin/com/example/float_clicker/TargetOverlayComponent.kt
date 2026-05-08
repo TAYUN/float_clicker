@@ -1,7 +1,6 @@
 package com.example.float_clicker
 
 import android.content.Context
-import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
@@ -77,12 +76,12 @@ internal class TargetOverlayComponent(
     private fun createView(): View {
         val outer = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(Color.argb(28, 25, 118, 210))
-            setStroke(overlayWindow.dp(3), Color.rgb(25, 118, 210))
+            setColor(OverlayColors.ACCENT_SOFT)
+            setStroke(overlayWindow.dp(3), OverlayColors.ACCENT)
         }
         val inner = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(Color.rgb(25, 118, 210))
+            setColor(OverlayColors.ACCENT)
         }
 
         return LinearLayout(context).apply {

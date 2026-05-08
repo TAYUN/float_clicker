@@ -53,7 +53,7 @@ class SinglePointOverlayManager(
             notifyOverlayStateChanged()
         },
         onTaskAction = ::toggleTaskRunState,
-        onEndTask = ::end,
+        onEndTask = ::endFromToolbar,
         onClose = ::hide,
         onCollapse = ::collapseToolbar,
     )
@@ -66,11 +66,13 @@ class SinglePointOverlayManager(
         },
         onExpand = {
             interactionState = interactionState.copy(isToolbarCollapsed = false)
+            Toast.makeText(context.applicationContext, "控制条已展开", Toast.LENGTH_SHORT).show()
             refreshInteractionViews()
         },
     )
 
     private val actionButtonComponent = ActionButtonOverlayComponent(
+        context = context,
         overlayWindow = overlay,
         onPositionChanged = { point ->
             interactionState = interactionState.copy(actionButtonPosition = point)
@@ -285,7 +287,7 @@ class SinglePointOverlayManager(
     private fun coerceInteractionStateToScreen() {
         val coercedState = interactionState.copy(
             targetPosition = overlay.coercePosition(interactionState.targetPosition, widthDp = 38, heightDp = 38),
-            toolbarPosition = overlay.coercePosition(interactionState.toolbarPosition, widthDp = 52, heightDp = 148),
+            toolbarPosition = overlay.coercePosition(interactionState.toolbarPosition, widthDp = 42, heightDp = 136),
             collapsedToolbarPosition = overlay.coercePosition(
                 interactionState.collapsedToolbarPosition,
                 widthDp = 44,
@@ -293,8 +295,8 @@ class SinglePointOverlayManager(
             ),
             actionButtonPosition = overlay.coercePosition(
                 interactionState.actionButtonPosition,
-                widthDp = 52,
-                heightDp = 52,
+                widthDp = 42,
+                heightDp = 42,
             ),
         )
 
@@ -322,15 +324,23 @@ class SinglePointOverlayManager(
         }
 
         interactionState = interactionState.copy(isToolbarCollapsed = true)
+        Toast.makeText(context.applicationContext, "控制条已收起", Toast.LENGTH_SHORT).show()
         refreshInteractionViews()
+    }
+
+    private fun endFromToolbar() {
+        end()
+        Toast.makeText(context.applicationContext, "点击任务已结束", Toast.LENGTH_SHORT).show()
     }
 
     private fun endFromActionButton() {
         if (taskStatus.taskRunState == TaskRunState.IDLE) {
+            Toast.makeText(context.applicationContext, "当前没有正在执行的任务", Toast.LENGTH_SHORT).show()
             return
         }
 
         end()
+        Toast.makeText(context.applicationContext, "点击任务已结束", Toast.LENGTH_SHORT).show()
     }
 
     private fun showTaskActionFailure() {

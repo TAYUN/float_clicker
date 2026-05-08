@@ -1,10 +1,10 @@
 package com.example.float_clicker
 
 import android.content.Context
-import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -27,7 +27,7 @@ internal class ToolbarOverlayComponent(
         if (view == null) {
             val toolbar = createView()
             val nextParams = overlayWindow.overlayParams(
-                width = overlayWindow.dp(52),
+                width = overlayWindow.dp(42),
                 height = WindowManager.LayoutParams.WRAP_CONTENT,
                 position = position,
             )
@@ -57,6 +57,7 @@ internal class ToolbarOverlayComponent(
             text = taskActionText(taskRunState)
             textSize = taskActionTextSize(taskRunState)
             contentDescription = taskActionContentDescription(taskRunState)
+            setButtonBackground(this, taskActionBackgroundColor(taskRunState))
         }
     }
 
@@ -68,42 +69,70 @@ internal class ToolbarOverlayComponent(
 
     private fun createView(): LinearLayout {
         val background = GradientDrawable().apply {
-            cornerRadius = overlayWindow.dp(18).toFloat()
-            setColor(Color.argb(236, 36, 39, 43))
+            cornerRadius = overlayWindow.dp(15).toFloat()
+            setColor(OverlayColors.PANEL)
         }
 
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(overlayWindow.dp(4), overlayWindow.dp(6), overlayWindow.dp(4), overlayWindow.dp(6))
+            setPadding(overlayWindow.dp(3), overlayWindow.dp(4), overlayWindow.dp(3), overlayWindow.dp(4))
             this.background = background
             elevation = overlayWindow.dp(8).toFloat()
 
-            addView(toolbarButton("✥", textSize = 24f, onClick = null))
-            addView(toolbarButton("▶", textSize = 24f) { onTaskAction() })
-            addView(toolbarButton("■", textSize = 20f) { onEndTask() })
-            addView(toolbarButton("×", textSize = 24f) { onClose() })
+            addView(toolbarButton("✥", textSize = 20f, contentDescription = "移动控制条", onClick = null))
+            addView(toolbarButton("▶", textSize = 19f, contentDescription = "开始点击") { onTaskAction() })
+            addView(
+                toolbarButton(
+                    "■",
+                    textSize = 15f,
+                    contentDescription = "结束任务",
+                    textColor = OverlayColors.DANGER,
+                ) { onEndTask() },
+            )
+            addView(toolbarButton("×", textSize = 20f, contentDescription = "关闭单点模式") { onClose() })
         }
     }
 
-    private fun toolbarButton(text: String, textSize: Float, onClick: (() -> Unit)?): TextView {
+    private fun toolbarButton(
+        text: String,
+        textSize: Float,
+        contentDescription: String,
+        backgroundColor: Int? = null,
+        textColor: Int = OverlayColors.TEXT_PRIMARY,
+        onClick: (() -> Unit)?,
+    ): TextView {
         return TextView(context).apply {
             this.text = text
             this.textSize = textSize
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            setTextColor(textColor)
             gravity = Gravity.CENTER
+            includeFontPadding = false
+            this.contentDescription = contentDescription
+            backgroundColor?.let { setButtonBackground(this, it) }
             isClickable = onClick != null
             if (onClick != null) {
-                setOnClickListener { onClick() }
+                setOnClickListener {
+                    performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                    onClick()
+                }
             }
-            layoutParams = LinearLayout.LayoutParams(overlayWindow.dp(44), overlayWindow.dp(40))
+            layoutParams = LinearLayout.LayoutParams(overlayWindow.dp(34), overlayWindow.dp(32))
         }
     }
 
     private fun handleDragButtonClick() {
         if (canCollapse) {
             onCollapse()
+        }
+    }
+
+    private fun setButtonBackground(button: TextView, color: Int) {
+        button.background = GradientDrawable().apply {
+            cornerRadius = overlayWindow.dp(11).toFloat()
+            setColor(color)
+            setStroke(overlayWindow.dp(1), OverlayColors.ACCENT)
         }
     }
 }
@@ -119,8 +148,8 @@ internal fun taskActionText(taskRunState: TaskRunState): String {
 internal fun taskActionTextSize(taskRunState: TaskRunState): Float {
     return when (taskRunState) {
         TaskRunState.IDLE,
-        TaskRunState.PAUSED -> 24f
-        TaskRunState.RUNNING -> 20f
+        TaskRunState.PAUSED -> 19f
+        TaskRunState.RUNNING -> 16f
     }
 }
 
@@ -129,5 +158,13 @@ internal fun taskActionContentDescription(taskRunState: TaskRunState): String {
         TaskRunState.IDLE -> "开始点击"
         TaskRunState.RUNNING -> "暂停点击"
         TaskRunState.PAUSED -> "继续点击"
+    }
+}
+
+internal fun taskActionBackgroundColor(taskRunState: TaskRunState): Int {
+    return when (taskRunState) {
+        TaskRunState.IDLE,
+        TaskRunState.RUNNING,
+        TaskRunState.PAUSED -> OverlayColors.ACCENT_SOFT
     }
 }

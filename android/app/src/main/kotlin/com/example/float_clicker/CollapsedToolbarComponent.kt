@@ -23,6 +23,7 @@ internal class CollapsedToolbarComponent(
                 view = collapsed,
                 params = nextParams,
                 onPositionChanged = { point -> onPositionChanged(point) },
+                onClick = onExpand,
             )
             overlayWindow.addView(collapsed, nextParams)
             view = collapsed
