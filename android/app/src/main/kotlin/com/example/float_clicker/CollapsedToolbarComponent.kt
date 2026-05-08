@@ -15,6 +15,9 @@ internal class CollapsedToolbarComponent(
         OverlayAppearanceSettings(),
     )
 
+    val isShowing: Boolean
+        get() = view != null
+
     fun show(position: OverlayPoint, metrics: OverlayComponentMetrics) {
         this.metrics = metrics
         if (view == null) {

@@ -23,6 +23,9 @@ internal class ActionButtonOverlayComponent(
         OverlayAppearanceSettings(),
     )
 
+    val isShowing: Boolean
+        get() = view != null
+
     fun show(position: OverlayPoint, taskRunState: TaskRunState, metrics: OverlayComponentMetrics) {
         this.metrics = metrics
         if (view == null) {

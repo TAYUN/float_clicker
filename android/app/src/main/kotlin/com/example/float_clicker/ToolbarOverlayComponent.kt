@@ -27,6 +27,9 @@ internal class ToolbarOverlayComponent(
         OverlayAppearanceSettings(),
     )
 
+    val isShowing: Boolean
+        get() = view != null
+
     fun show(
         position: OverlayPoint,
         taskRunState: TaskRunState,

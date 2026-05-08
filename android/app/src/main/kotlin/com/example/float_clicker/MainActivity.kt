@@ -27,7 +27,7 @@ class MainActivity : FlutterActivity() {
                 }
             }
             if (::multiPointOverlayManager.isInitialized && multiPointOverlayManager.isShowing && !canDrawOverlays()) {
-                multiPointOverlayManager.hide()
+                multiPointOverlayManager.handleOverlayPermissionRevoked()
                 if (::channel.isInitialized) {
                     channel.invokeMethod("permissionSnapshotChanged", getPermissionSnapshot())
                 }

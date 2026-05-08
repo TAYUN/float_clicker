@@ -32,8 +32,10 @@ internal class MultiPointOverlayManager(
             return@Runnable
         }
 
-        refreshTargetComponents()
-        refreshInteractionViews()
+        if (!refreshTargetComponents() || !refreshInteractionViews()) {
+            hide()
+            return@Runnable
+        }
         notifyOverlayStateChanged()
     }
     private val targetComponents = mutableMapOf<String, MultiPointTargetOverlayComponent>()
@@ -91,11 +93,17 @@ internal class MultiPointOverlayManager(
         applySettings(settings)
         coerceOverlayStateToScreen()
         isModeEnabled = true
-        refreshTargetComponents()
-        refreshInteractionViews()
+        val targetsReady = refreshTargetComponents()
+        val interactionReady = refreshInteractionViews()
+        if (!targetsReady || !interactionReady) {
+            // 多点模式需要目标点和当前交互模式的控制组件同时创建成功；
+            // 任一窗口失败都回滚，避免 Flutter 误以为模式已开启但悬浮层只显示一部分。
+            hide()
+            return false
+        }
         ensureDisplayListener()
         notifyOverlayStateChanged()
-        return targets.none { it.enabled } || targetComponents.isNotEmpty()
+        return true
     }
 
     fun hide() {
@@ -106,6 +114,15 @@ internal class MultiPointOverlayManager(
         removeInteractionComponents()
         removeDisplayListener()
         notifyOverlayStateChanged()
+    }
+
+    fun handleOverlayPermissionRevoked() {
+        if (!isModeEnabled) {
+            return
+        }
+
+        hide()
+        Toast.makeText(context.applicationContext, "悬浮窗权限已关闭，多点模式已退出", Toast.LENGTH_SHORT).show()
     }
 
     fun updateTargets(nextTargets: List<MultiPointTargetState>) {
@@ -137,8 +154,10 @@ internal class MultiPointOverlayManager(
         metrics = OverlayComponentMetrics(overlay, appearanceSettings)
         if (isModeEnabled) {
             coerceOverlayStateToScreen()
-            refreshTargetComponents()
-            refreshInteractionViews()
+            if (!refreshTargetComponents() || !refreshInteractionViews()) {
+                hide()
+                return
+            }
         }
         notifyOverlayStateChanged()
     }
@@ -163,7 +182,7 @@ internal class MultiPointOverlayManager(
         onOverlayStateChanged(snapshot)
     }
 
-    private fun refreshTargetComponents() {
+    private fun refreshTargetComponents(): Boolean {
         coerceOverlayStateToScreen()
         val enabledTargets = targets.filter { it.enabled }
         val enabledIds = enabledTargets.map { it.id }.toSet()
@@ -187,7 +206,11 @@ internal class MultiPointOverlayManager(
                 displayIndex = index + 1,
                 metrics = metrics,
             )
+            if (!component.isShowing) {
+                return false
+            }
         }
+        return true
     }
 
     private fun removeAllTargetComponents() {
@@ -195,10 +218,10 @@ internal class MultiPointOverlayManager(
         targetComponents.clear()
     }
 
-    private fun refreshInteractionViews() {
+    private fun refreshInteractionViews(): Boolean {
         if (!isModeEnabled) {
             removeInteractionComponents()
-            return
+            return true
         }
 
         coerceOverlayStateToScreen()
@@ -209,12 +232,18 @@ internal class MultiPointOverlayManager(
                 canCollapse = overlayUiState.interactionMode == OverlayInteractionMode.COMPACT,
                 metrics = metrics,
             )
+            if (!toolbarComponent.isShowing) {
+                return false
+            }
         } else {
             toolbarComponent.remove()
         }
 
         if (overlayUiState.shouldShowCollapsedToolbar()) {
             collapsedToolbarComponent.show(overlayUiState.collapsedToolbarPosition, metrics)
+            if (!collapsedToolbarComponent.isShowing) {
+                return false
+            }
         } else {
             collapsedToolbarComponent.remove()
         }
@@ -225,9 +254,13 @@ internal class MultiPointOverlayManager(
                 taskRunState = TaskRunState.IDLE,
                 metrics = metrics,
             )
+            if (!actionButtonComponent.isShowing) {
+                return false
+            }
         } else {
             actionButtonComponent.remove()
         }
+        return true
     }
 
     private fun removeInteractionComponents() {
