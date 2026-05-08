@@ -12,6 +12,7 @@ import android.view.Display
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
+import android.view.Surface
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
@@ -34,6 +35,14 @@ internal class OverlayWindowHelper(
     private val windowManager: WindowManager,
 ) {
     private val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+    private val metricsWindowManager: WindowManager =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            context
+                .createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null)
+                .getSystemService(WindowManager::class.java)
+        } else {
+            windowManager
+        }
 
     fun addView(view: View, params: WindowManager.LayoutParams): Boolean {
         return runCatching {
@@ -163,7 +172,13 @@ internal class OverlayWindowHelper(
                     }
                     params.x = startX + dx.roundToInt()
                     params.y = startY + dy.roundToInt()
-                    coerceParamsToVisibleBounds(touchedView.rootView, params)
+                    val dragBoundsMode = dragBoundsModeFor(event.rawX)
+                    coerceParamsToVisibleBounds(
+                        view = touchedView.rootView,
+                        params = params,
+                        relaxRight = dragBoundsMode.relaxRight,
+                        forceLandscapeVerticalBounds = dragBoundsMode.forceLandscapeVerticalBounds,
+                    )
                     updateViewLayout(touchedView.rootView, params)
                     true
                 }
@@ -242,8 +257,17 @@ internal class OverlayWindowHelper(
         onPositionChanged(OverlayPoint(x = logicalPosition(params.x), y = logicalPosition(params.y)))
     }
 
-    private fun coerceParamsToVisibleBounds(view: View, params: WindowManager.LayoutParams) {
-        val bounds = overlayBoundsPx(view)
+    private fun coerceParamsToVisibleBounds(
+        view: View,
+        params: WindowManager.LayoutParams,
+        relaxRight: Boolean = false,
+        forceLandscapeVerticalBounds: Boolean = false,
+    ) {
+        val bounds = overlayBoundsPx(
+            view = view,
+            relaxRight = relaxRight,
+            forceLandscapeVerticalBounds = forceLandscapeVerticalBounds,
+        )
         val viewWidth = viewSizeOrParamSize(view.width, params.width)
         val viewHeight = viewSizeOrParamSize(view.height, params.height)
         val maxX = (bounds.right - viewWidth).coerceAtLeast(bounds.left)
@@ -260,23 +284,29 @@ internal class OverlayWindowHelper(
         updateViewLayout(view, params)
     }
 
-    private fun overlayBoundsPx(view: View?): OverlayBoundsPx {
+    private fun overlayBoundsPx(
+        view: View?,
+        relaxRight: Boolean = false,
+        forceLandscapeVerticalBounds: Boolean = false,
+    ): OverlayBoundsPx {
         val screenSize = realScreenSizePx()
         val isPortrait = screenSize.second >= screenSize.first
-
-        if (!isPortrait) {
-            // 横屏下部分系统会把 overlay 的可用宽度报告成竖屏宽度，导致右侧过早卡住。
-            // 这里放宽右/下边界，仅保留左/上非负，用户仍可拖回可见区域。
-            val relaxedMax = Int.MAX_VALUE / 4
-            return OverlayBoundsPx(left = 0, top = 0, right = relaxedMax, bottom = relaxedMax)
+        val treatAsLandscape = forceLandscapeVerticalBounds || !isPortrait
+        val relaxedMax = Int.MAX_VALUE / 4
+        val topInset = if (treatAsLandscape) 0 else statusBarHeightPx()
+        // 跨应用横屏时系统可能持续返回竖屏宽度；拖动 rawX 超出旧宽度后只放宽右边界。
+        // 竖屏仍保持严格右边界，避免点位跑出屏幕右侧。
+        val right = if (relaxRight || treatAsLandscape) relaxedMax else screenSize.first
+        val bottom = if (treatAsLandscape) {
+            minOf(screenSize.first, screenSize.second)
+        } else {
+            maxOf(screenSize.first, screenSize.second)
         }
-
-        val topInset = statusBarHeightPx()
         return OverlayBoundsPx(
             left = 0,
             top = topInset,
-            right = screenSize.first,
-            bottom = screenSize.second,
+            right = right,
+            bottom = bottom,
         )
     }
 
@@ -298,18 +328,59 @@ internal class OverlayWindowHelper(
     }
 
     private fun realScreenSizePx(): Pair<Int, Int> {
+        windowMetricsScreenSizePx()?.let { return it }
+
         val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY)
         val size = Point()
         if (display != null) {
             @Suppress("DEPRECATION")
             display.getRealSize(size)
             if (size.x > 0 && size.y > 0) {
-                return Pair(size.x, size.y)
+                return rotatedScreenSizePx(display, size)
             }
         }
 
         val metrics = context.resources.displayMetrics
         return Pair(metrics.widthPixels, metrics.heightPixels)
+    }
+
+    private fun windowMetricsScreenSizePx(): Pair<Int, Int>? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return null
+        }
+
+        val bounds = metricsWindowManager.maximumWindowMetrics.bounds
+        if (bounds.width() <= 0 || bounds.height() <= 0) {
+            return null
+        }
+
+        // TYPE_APPLICATION_OVERLAY 的 WindowContext 比 Activity context 更接近悬浮窗实际所在显示区域。
+        return Pair(bounds.width(), bounds.height())
+    }
+
+    private fun dragBoundsModeFor(rawX: Float): DragBoundsMode {
+        val screenSize = realScreenSizePx()
+        val strictWidth = minOf(screenSize.first, screenSize.second)
+        val crossesOldPortraitWidth = rawX.roundToInt() > strictWidth
+        return DragBoundsMode(
+            relaxRight = crossesOldPortraitWidth,
+            forceLandscapeVerticalBounds = crossesOldPortraitWidth,
+        )
+    }
+
+    private fun rotatedScreenSizePx(display: Display, size: Point): Pair<Int, Int> {
+        val longSide = maxOf(size.x, size.y)
+        val shortSide = minOf(size.x, size.y)
+
+        return when (display.rotation) {
+            Surface.ROTATION_90,
+            Surface.ROTATION_270,
+            -> {
+                // 跨应用横屏时部分设备仍会把 realSize 报成竖屏宽高；用 rotation 纠正边界方向。
+                Pair(longSide, shortSide)
+            }
+            else -> Pair(shortSide, longSide)
+        }
     }
 
     private fun logicalPosition(value: Int): Int {
@@ -323,4 +394,9 @@ private data class OverlayBoundsPx(
     val top: Int,
     val right: Int,
     val bottom: Int,
+)
+
+private data class DragBoundsMode(
+    val relaxRight: Boolean,
+    val forceLandscapeVerticalBounds: Boolean,
 )

@@ -224,6 +224,9 @@ class MainActivity : FlutterActivity() {
         if (::singlePointOverlayManager.isInitialized) {
             singlePointOverlayManager.handleConfigurationChanged()
         }
+        if (::multiPointOverlayManager.isInitialized) {
+            multiPointOverlayManager.handleConfigurationChanged()
+        }
     }
 
     private fun getPermissionSnapshot(): Map<String, Boolean> {

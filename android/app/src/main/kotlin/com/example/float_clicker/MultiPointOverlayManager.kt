@@ -1,6 +1,10 @@
 package com.example.float_clicker
 
 import android.content.Context
+import android.hardware.display.DisplayManager
+import android.os.Handler
+import android.os.Looper
+import android.view.Display
 import android.view.WindowManager
 import android.widget.Toast
 
@@ -10,7 +14,19 @@ internal class MultiPointOverlayManager(
     private val onTargetPositionChanged: (String, OverlayPoint) -> Unit = { _, _ -> },
 ) {
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+    private val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val overlay = OverlayWindowHelper(context, windowManager)
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) = Unit
+        override fun onDisplayRemoved(displayId: Int) = Unit
+
+        override fun onDisplayChanged(displayId: Int) {
+            if (displayId == Display.DEFAULT_DISPLAY) {
+                handleDisplayBoundsChanged()
+            }
+        }
+    }
     private val targetComponents = mutableMapOf<String, MultiPointTargetOverlayComponent>()
     private val toolbarComponent = ToolbarOverlayComponent(
         context = context,
@@ -48,6 +64,7 @@ internal class MultiPointOverlayManager(
     private var metrics = OverlayComponentMetrics(overlay, appearanceSettings)
     private var targets = defaultMultiPointTargets()
     private var isModeEnabled = false
+    private var isDisplayListenerRegistered = false
 
     val isShowing: Boolean
         get() = isModeEnabled
@@ -62,9 +79,11 @@ internal class MultiPointOverlayManager(
 
     fun show(settings: MultiPointOverlaySettings = MultiPointOverlaySettings()): Boolean {
         applySettings(settings)
+        coerceOverlayStateToScreen()
         isModeEnabled = true
         refreshTargetComponents()
         refreshInteractionViews()
+        ensureDisplayListener()
         notifyOverlayStateChanged()
         return targets.none { it.enabled } || targetComponents.isNotEmpty()
     }
@@ -73,6 +92,7 @@ internal class MultiPointOverlayManager(
         isModeEnabled = false
         removeAllTargetComponents()
         removeInteractionComponents()
+        removeDisplayListener()
         notifyOverlayStateChanged()
     }
 
@@ -93,6 +113,7 @@ internal class MultiPointOverlayManager(
 
     fun updateOverlayUiState(state: MultiPointOverlayUiState) {
         overlayUiState = state
+        coerceOverlayStateToScreen()
         if (isModeEnabled) {
             refreshInteractionViews()
         }
@@ -103,10 +124,20 @@ internal class MultiPointOverlayManager(
         appearanceSettings = settings.normalized
         metrics = OverlayComponentMetrics(overlay, appearanceSettings)
         if (isModeEnabled) {
+            coerceOverlayStateToScreen()
             refreshTargetComponents()
             refreshInteractionViews()
         }
         notifyOverlayStateChanged()
+    }
+
+    fun handleConfigurationChanged() {
+        if (!isModeEnabled) {
+            return
+        }
+
+        // Activity 横竖屏切换不重建时，按新屏幕边界延迟刷新，避免使用旧 display 尺寸。
+        handleDisplayBoundsChanged()
     }
 
     private fun applySettings(settings: MultiPointOverlaySettings) {
@@ -121,6 +152,7 @@ internal class MultiPointOverlayManager(
     }
 
     private fun refreshTargetComponents() {
+        coerceOverlayStateToScreen()
         val enabledTargets = targets.filter { it.enabled }
         val enabledIds = enabledTargets.map { it.id }.toSet()
         val removedIds = targetComponents.keys - enabledIds
@@ -157,6 +189,7 @@ internal class MultiPointOverlayManager(
             return
         }
 
+        coerceOverlayStateToScreen()
         if (overlayUiState.shouldShowToolbar()) {
             toolbarComponent.show(
                 position = overlayUiState.toolbarPosition,
@@ -222,6 +255,87 @@ internal class MultiPointOverlayManager(
         // 点位拖动需要单独回传，Flutter 侧据此只更新对应点位并保存 targets_json。
         onTargetPositionChanged(targetId, point)
         notifyOverlayStateChanged()
+    }
+
+    private fun handleDisplayBoundsChanged() {
+        mainHandler.post {
+            if (!isModeEnabled) {
+                return@post
+            }
+
+            refreshTargetComponents()
+            refreshInteractionViews()
+            notifyOverlayStateChanged()
+        }
+    }
+
+    private fun ensureDisplayListener() {
+        if (isDisplayListenerRegistered) {
+            return
+        }
+
+        displayManager.registerDisplayListener(displayListener, mainHandler)
+        isDisplayListenerRegistered = true
+    }
+
+    private fun removeDisplayListener() {
+        if (!isDisplayListenerRegistered) {
+            return
+        }
+
+        displayManager.unregisterDisplayListener(displayListener)
+        isDisplayListenerRegistered = false
+    }
+
+    private fun coerceOverlayStateToScreen() {
+        coerceTargetPositionsToScreen()
+        coerceInteractionPositionsToScreen()
+    }
+
+    private fun coerceTargetPositionsToScreen() {
+        val nextTargets = targets.map { target ->
+            val coercedPoint = overlay.coercePositionPx(
+                OverlayPoint(target.x, target.y),
+                widthPx = metrics.targetSizePx,
+                heightPx = metrics.targetSizePx,
+            )
+            if (coercedPoint.x == target.x && coercedPoint.y == target.y) {
+                target
+            } else {
+                // 多点点位坐标保存在 targets_json；横竖屏裁剪后必须同步回 Flutter。
+                onTargetPositionChanged(target.id, coercedPoint)
+                target.copy(x = coercedPoint.x, y = coercedPoint.y)
+            }
+        }
+
+        if (nextTargets != targets) {
+            targets = nextTargets
+        }
+    }
+
+    private fun coerceInteractionPositionsToScreen() {
+        val coercedState = overlayUiState.copy(
+            toolbarPosition = overlay.coercePositionPx(
+                overlayUiState.toolbarPosition,
+                widthPx = metrics.toolbarWidthPx,
+                heightPx = metrics.toolbarEstimatedHeightPx,
+            ),
+            collapsedToolbarPosition = overlay.coercePositionPx(
+                overlayUiState.collapsedToolbarPosition,
+                widthPx = metrics.collapsedToolbarSizePx,
+                heightPx = metrics.collapsedToolbarSizePx,
+            ),
+            actionButtonPosition = overlay.coercePositionPx(
+                overlayUiState.actionButtonPosition,
+                widthPx = metrics.actionButtonSizePx,
+                heightPx = metrics.actionButtonSizePx,
+            ),
+        )
+
+        if (coercedState != overlayUiState) {
+            // 控制组件位置保存在多点 Overlay 快照中，更新 state 后由 snapshot 回传持久化。
+            overlayUiState = coercedState
+        }
     }
 
     private fun normalizedTargets(nextTargets: List<MultiPointTargetState>): List<MultiPointTargetState> {
