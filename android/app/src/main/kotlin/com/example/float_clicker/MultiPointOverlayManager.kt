@@ -27,6 +27,15 @@ internal class MultiPointOverlayManager(
             }
         }
     }
+    private val displayBoundsRefreshRunnable = Runnable {
+        if (!isModeEnabled) {
+            return@Runnable
+        }
+
+        refreshTargetComponents()
+        refreshInteractionViews()
+        notifyOverlayStateChanged()
+    }
     private val targetComponents = mutableMapOf<String, MultiPointTargetOverlayComponent>()
     private val toolbarComponent = ToolbarOverlayComponent(
         context = context,
@@ -39,6 +48,7 @@ internal class MultiPointOverlayManager(
         onEndTask = ::showTaskUnavailableMessage,
         onClose = ::hide,
         onCollapse = ::collapseToolbar,
+        closeContentDescription = "关闭多点模式",
     )
     private val collapsedToolbarComponent = CollapsedToolbarComponent(
         overlayWindow = overlay,
@@ -90,6 +100,8 @@ internal class MultiPointOverlayManager(
 
     fun hide() {
         isModeEnabled = false
+        // 关闭模式后取消已排队的横竖屏刷新，避免窗口移除后又被延迟任务重新触发布局更新。
+        mainHandler.removeCallbacks(displayBoundsRefreshRunnable)
         removeAllTargetComponents()
         removeInteractionComponents()
         removeDisplayListener()
@@ -258,15 +270,8 @@ internal class MultiPointOverlayManager(
     }
 
     private fun handleDisplayBoundsChanged() {
-        mainHandler.post {
-            if (!isModeEnabled) {
-                return@post
-            }
-
-            refreshTargetComponents()
-            refreshInteractionViews()
-            notifyOverlayStateChanged()
-        }
+        mainHandler.removeCallbacks(displayBoundsRefreshRunnable)
+        mainHandler.post(displayBoundsRefreshRunnable)
     }
 
     private fun ensureDisplayListener() {

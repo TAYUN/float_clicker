@@ -17,6 +17,7 @@ internal class ToolbarOverlayComponent(
     private val onEndTask: () -> Unit,
     private val onClose: () -> Unit,
     private val onCollapse: () -> Unit,
+    private val closeContentDescription: String = "关闭单点模式",
 ) {
     private var view: LinearLayout? = null
     private var params: WindowManager.LayoutParams? = null
@@ -122,7 +123,7 @@ internal class ToolbarOverlayComponent(
                     textColor = OverlayColors.DANGER,
                 ) { onEndTask() },
             )
-            addView(toolbarButton("×", textSize = metrics.toolbarCloseTextSizeSp, contentDescription = "关闭单点模式") { onClose() })
+            addView(toolbarButton("×", textSize = metrics.toolbarCloseTextSizeSp, contentDescription = closeContentDescription) { onClose() })
         }
     }
 
