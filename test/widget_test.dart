@@ -100,15 +100,6 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> scrollUntilTextVisible(WidgetTester tester, String text) async {
-    final finder = find.text(text);
-    for (var index = 0; index < 4 && finder.evaluate().isEmpty; index += 1) {
-      await scrollDown(tester);
-    }
-    await tester.ensureVisible(finder);
-    await tester.pumpAndSettle();
-  }
-
   setUp(() {
     methodCalls.clear();
     nativeOverlayEnabled = false;
@@ -280,41 +271,51 @@ void main() {
     expect(find.text('间隔 500 ms，次数 10，极简模式'), findsOneWidget);
   });
 
-  testWidgets('Global overlay control scale persists after saving settings', (
+  testWidgets('Global settings persists component overlay scales', (
     tester,
   ) async {
     await tester.pumpWidget(const FloatClickerApp());
 
-    await tester.tap(find.text('单点模式'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('设置'));
+    await tester.tap(find.text('全局设置'));
     await tester.pumpAndSettle();
 
-    await scrollUntilTextVisible(tester, '全局悬浮外观');
+    expect(find.text('悬浮外观'), findsOneWidget);
+    expect(find.text('悬浮点位大小'), findsOneWidget);
+    expect(find.text('控制条大小'), findsOneWidget);
+    expect(find.text('独立控件大小'), findsOneWidget);
+    expect(find.text('100%'), findsNWidgets(3));
 
-    expect(find.text('全局悬浮外观'), findsOneWidget);
-    expect(find.text('100%'), findsOneWidget);
-
-    await tester.drag(find.byType(Slider), const Offset(160, 0));
+    await tester.drag(find.byType(Slider).at(0), const Offset(160, 0));
+    await tester.drag(find.byType(Slider).at(1), const Offset(-80, 0));
     await tester.pumpAndSettle();
     await tapVisibleText(tester, '保存');
 
     final preferences = await SharedPreferences.getInstance();
-    final savedScale = preferences.getDouble(
-      GlobalOverlayAppearanceStore.overlayControlScaleKey,
+    expect(
+      preferences.getDouble(GlobalOverlayAppearanceStore.targetPointScaleKey),
+      greaterThan(1.0),
     );
-    expect(savedScale, isNotNull);
-    expect(savedScale!, greaterThan(1.0));
+    expect(
+      preferences.getDouble(GlobalOverlayAppearanceStore.toolbarScaleKey),
+      isNot(1.0),
+    );
+    expect(
+      preferences.getDouble(GlobalOverlayAppearanceStore.actionButtonScaleKey),
+      1.0,
+    );
 
-    await tester.tap(find.text('设置'));
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('全局设置'));
     await tester.pumpAndSettle();
 
-    await scrollUntilTextVisible(tester, '${(savedScale * 100).round()}%');
-
-    expect(find.text('${(savedScale * 100).round()}%'), findsOneWidget);
+    final savedTargetScale = preferences.getDouble(
+      GlobalOverlayAppearanceStore.targetPointScaleKey,
+    )!;
+    expect(find.text('${(savedTargetScale * 100).round()}%'), findsOneWidget);
   });
 
-  testWidgets('Reset global overlay control scale saves default value', (
+  testWidgets('Legacy global overlay scale migrates to component scales', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({
@@ -323,24 +324,26 @@ void main() {
 
     await tester.pumpWidget(const FloatClickerApp());
 
-    await tester.tap(find.text('单点模式'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('设置'));
+    await tester.tap(find.text('全局设置'));
     await tester.pumpAndSettle();
 
-    await scrollUntilTextVisible(tester, '130%');
-
-    expect(find.text('130%'), findsOneWidget);
+    expect(find.text('130%'), findsNWidgets(3));
 
     await tapVisibleText(tester, '恢复默认');
-    expect(find.text('100%'), findsOneWidget);
+    expect(find.text('100%'), findsNWidgets(3));
     await tapVisibleText(tester, '保存');
 
     final preferences = await SharedPreferences.getInstance();
     expect(
-      preferences.getDouble(
-        GlobalOverlayAppearanceStore.overlayControlScaleKey,
-      ),
+      preferences.getDouble(GlobalOverlayAppearanceStore.targetPointScaleKey),
+      1.0,
+    );
+    expect(
+      preferences.getDouble(GlobalOverlayAppearanceStore.toolbarScaleKey),
+      1.0,
+    );
+    expect(
+      preferences.getDouble(GlobalOverlayAppearanceStore.actionButtonScaleKey),
       1.0,
     );
   });
@@ -380,13 +383,11 @@ void main() {
       'normal',
     );
 
-    final appearanceUpdateCall = methodCalls.lastWhere(
-      (call) => call.method == 'updateGlobalOverlayAppearanceSettings',
-    );
     expect(
-      (appearanceUpdateCall.arguments
-          as Map<Object?, Object?>)['overlayControlScale'],
-      1.0,
+      methodCalls.where(
+        (call) => call.method == 'updateGlobalOverlayAppearanceSettings',
+      ),
+      isEmpty,
     );
   });
 
@@ -394,7 +395,9 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({
-      GlobalOverlayAppearanceStore.overlayControlScaleKey: 1.25,
+      GlobalOverlayAppearanceStore.targetPointScaleKey: 1.1,
+      GlobalOverlayAppearanceStore.toolbarScaleKey: 1.2,
+      GlobalOverlayAppearanceStore.actionButtonScaleKey: 1.3,
     });
 
     await tester.pumpWidget(const FloatClickerApp());
@@ -409,7 +412,29 @@ void main() {
     );
     expect(
       (showCall.arguments as Map<Object?, Object?>)['overlayControlScale'],
-      1.25,
+      closeTo(1.2, 0.001),
+    );
+  });
+
+  testWidgets('Saving global settings syncs native overlay appearance', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tester.tap(find.text('全局设置'));
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(Slider).at(2), const Offset(160, 0));
+    await tester.pumpAndSettle();
+    await tapVisibleText(tester, '保存');
+
+    final appearanceUpdateCall = methodCalls.lastWhere(
+      (call) => call.method == 'updateGlobalOverlayAppearanceSettings',
+    );
+    expect(
+      (appearanceUpdateCall.arguments
+          as Map<Object?, Object?>)['overlayControlScale'],
+      greaterThan(1.0),
     );
   });
 

@@ -6,26 +6,52 @@ class GlobalOverlayAppearanceStore {
   const GlobalOverlayAppearanceStore();
 
   static const overlayControlScaleKey = 'global.overlay_control_scale';
+  static const targetPointScaleKey = 'global.overlay.target_point_scale';
+  static const toolbarScaleKey = 'global.overlay.toolbar_scale';
+  static const actionButtonScaleKey = 'global.overlay.action_button_scale';
 
   Future<GlobalOverlayAppearanceSettings> load() async {
     final preferences = await SharedPreferences.getInstance();
-    final scale = preferences.getDouble(overlayControlScaleKey);
+    final legacyScale = preferences.getDouble(overlayControlScaleKey);
+    final fallbackSettings = legacyScale == null
+        ? GlobalOverlayAppearanceSettings.defaults
+        : GlobalOverlayAppearanceSettings.uniform(legacyScale);
 
-    // 全局外观配置会被单点和后续多点复用；读取时统一做范围裁剪，避免旧版本异常值影响悬浮控件。
+    // 新版本拆成分组件比例；旧版本只保存一个全局比例，首次读取时用它作为三个新字段的迁移来源。
     return GlobalOverlayAppearanceSettings(
-      overlayControlScale: GlobalOverlayAppearanceSettings.normalizeScale(
-        scale ?? GlobalOverlayAppearanceSettings.defaults.overlayControlScale,
+      targetPointScale: GlobalOverlayAppearanceSettings.normalizeScale(
+        preferences.getDouble(targetPointScaleKey) ??
+            fallbackSettings.targetPointScale,
+      ),
+      toolbarScale: GlobalOverlayAppearanceSettings.normalizeScale(
+        preferences.getDouble(toolbarScaleKey) ?? fallbackSettings.toolbarScale,
+      ),
+      actionButtonScale: GlobalOverlayAppearanceSettings.normalizeScale(
+        preferences.getDouble(actionButtonScaleKey) ??
+            fallbackSettings.actionButtonScale,
       ),
     );
   }
 
   Future<void> save(GlobalOverlayAppearanceSettings settings) async {
     final preferences = await SharedPreferences.getInstance();
-    await preferences.setDouble(
-      overlayControlScaleKey,
-      GlobalOverlayAppearanceSettings.normalizeScale(
-        settings.overlayControlScale,
+    await Future.wait([
+      preferences.setDouble(
+        targetPointScaleKey,
+        GlobalOverlayAppearanceSettings.normalizeScale(
+          settings.targetPointScale,
+        ),
       ),
-    );
+      preferences.setDouble(
+        toolbarScaleKey,
+        GlobalOverlayAppearanceSettings.normalizeScale(settings.toolbarScale),
+      ),
+      preferences.setDouble(
+        actionButtonScaleKey,
+        GlobalOverlayAppearanceSettings.normalizeScale(
+          settings.actionButtonScale,
+        ),
+      ),
+    ]);
   }
 }

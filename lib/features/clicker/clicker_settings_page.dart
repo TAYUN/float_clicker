@@ -1,20 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/settings/global_overlay_appearance_settings.dart';
 import 'clicker_settings.dart';
 
 class ClickerSettingsPage extends StatefulWidget {
-  const ClickerSettingsPage({
-    super.key,
-    required this.initialSettings,
-    required this.initialAppearanceSettings,
-  });
+  const ClickerSettingsPage({super.key, required this.initialSettings});
 
   static const routeName = '/single-point/settings';
 
   final SinglePointSettings initialSettings;
-  final GlobalOverlayAppearanceSettings initialAppearanceSettings;
 
   @override
   State<ClickerSettingsPage> createState() => _ClickerSettingsPageState();
@@ -26,7 +20,6 @@ class _ClickerSettingsPageState extends State<ClickerSettingsPage> {
   late final TextEditingController _tapDurationController;
 
   late bool _infiniteLoop;
-  late double _overlayControlScale;
 
   @override
   void initState() {
@@ -42,7 +35,6 @@ class _ClickerSettingsPageState extends State<ClickerSettingsPage> {
     );
     _infiniteLoop = widget.initialSettings.clickerSettings.infiniteLoop;
     _interactionMode = widget.initialSettings.overlayUiSettings.interactionMode;
-    _overlayControlScale = widget.initialAppearanceSettings.overlayControlScale;
   }
 
   late OverlayInteractionMode _interactionMode;
@@ -154,66 +146,6 @@ class _ClickerSettingsPageState extends State<ClickerSettingsPage> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '全局悬浮外观',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: _resetOverlayControlScale,
-                          child: const Text('恢复默认'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '对单点模式和后续多点模式生效',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        const Expanded(child: Text('悬浮控件大小')),
-                        Text(
-                          _overlayControlScaleLabel,
-                          style: Theme.of(context).textTheme.labelLarge,
-                        ),
-                      ],
-                    ),
-                    Slider(
-                      value: _overlayControlScale,
-                      min: GlobalOverlayAppearanceSettings.minScale,
-                      max: GlobalOverlayAppearanceSettings.maxScale,
-                      divisions:
-                          ((GlobalOverlayAppearanceSettings.maxScale -
-                                      GlobalOverlayAppearanceSettings
-                                          .minScale) /
-                                  GlobalOverlayAppearanceSettings.step)
-                              .round(),
-                      label: _overlayControlScaleLabel,
-                      onChanged: (value) {
-                        setState(() {
-                          _overlayControlScale =
-                              GlobalOverlayAppearanceSettings.normalizeScale(
-                                value,
-                              );
-                        });
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
             const SizedBox(height: 80),
           ],
         ),
@@ -252,35 +184,15 @@ class _ClickerSettingsPageState extends State<ClickerSettingsPage> {
             interactionMode: _interactionMode,
           ),
         ),
-        appearanceSettings: GlobalOverlayAppearanceSettings(
-          overlayControlScale: GlobalOverlayAppearanceSettings.normalizeScale(
-            _overlayControlScale,
-          ),
-        ),
       ),
     );
-  }
-
-  String get _overlayControlScaleLabel {
-    return '${(_overlayControlScale * 100).round()}%';
-  }
-
-  void _resetOverlayControlScale() {
-    setState(() {
-      _overlayControlScale =
-          GlobalOverlayAppearanceSettings.defaults.overlayControlScale;
-    });
   }
 }
 
 class ClickerSettingsResult {
-  const ClickerSettingsResult({
-    required this.singlePointSettings,
-    required this.appearanceSettings,
-  });
+  const ClickerSettingsResult({required this.singlePointSettings});
 
   final SinglePointSettings singlePointSettings;
-  final GlobalOverlayAppearanceSettings appearanceSettings;
 }
 
 class _NumberField extends StatelessWidget {

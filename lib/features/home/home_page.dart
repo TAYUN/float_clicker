@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/platform/android_permission_service.dart';
 import '../clicker/clicker_settings.dart';
 import '../clicker/clicker_page.dart';
+import '../settings/global_settings_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -131,6 +132,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             Text('当前运行状态', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
             _RunStateCard(snapshot: _singlePointSnapshot),
+            const SizedBox(height: 24),
+            Text('全局配置', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            _ModeTile(
+              icon: Icons.tune,
+              title: '全局设置',
+              subtitle: '调整悬浮点位、控制条和独立控件大小',
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () =>
+                  Navigator.of(context).pushNamed(GlobalSettingsPage.routeName),
+            ),
             const SizedBox(height: 24),
             Text('点击模式', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),

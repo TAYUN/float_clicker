@@ -286,7 +286,6 @@ class _ClickerPageState extends State<ClickerPage> with WidgetsBindingObserver {
             clickerSettings: _controller.settings,
             overlayUiSettings: _controller.overlayUiSettings,
           ),
-          initialAppearanceSettings: _appearanceSettings,
         ),
       ),
     );
@@ -295,11 +294,7 @@ class _ClickerPageState extends State<ClickerPage> with WidgetsBindingObserver {
       return;
     }
 
-    await Future.wait([
-      _settingsStore.saveSinglePointSettings(result.singlePointSettings),
-      _appearanceStore.save(result.appearanceSettings),
-    ]);
-    _appearanceSettings = result.appearanceSettings;
+    await _settingsStore.saveSinglePointSettings(result.singlePointSettings);
     _controller.updateSinglePointSettings(result.singlePointSettings);
     if (_controller.isSinglePointModeEnabled) {
       // 悬浮窗已经创建时，保存新配置后需要同步给 Android，
@@ -309,9 +304,6 @@ class _ClickerPageState extends State<ClickerPage> with WidgetsBindingObserver {
       );
       await _permissionService.updateSinglePointOverlayUiSettings(
         result.singlePointSettings.overlayUiSettings,
-      );
-      await _permissionService.updateGlobalOverlayAppearanceSettings(
-        result.appearanceSettings,
       );
     }
   }
