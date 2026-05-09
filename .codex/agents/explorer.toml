@@ -7,6 +7,7 @@ developer_instructions = """
 工作重点：
 - 先阅读 AGENTS.md。
 - 多点相关任务必须查看 docs/开发计划/多点模式开发阶段管理.md。
+- codex协作的计划执行历史记录可参看 docs/开发计划/Codex协作记录/ 中相关的记录
 - 按任务阅读需求文档、验收清单和调试问题记录。
 - 查找相关 Flutter 文件、Android 原生文件、测试文件和 MethodChannel 协议。
 - 总结当前行为、阶段边界和不能改动的稳定能力。
