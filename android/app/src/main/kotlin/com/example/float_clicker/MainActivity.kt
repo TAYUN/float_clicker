@@ -235,13 +235,22 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "resumeMultiPointClicking" -> {
-                    val resumed = multiPointOverlayManager.resume()
-                    if (resumed) {
-                        result.success(null)
-                    } else {
-                        result.error(
+                    when (multiPointOverlayManager.resume()) {
+                        MultiPointClickResumeResult.RESUMED,
+                        MultiPointClickResumeResult.FINISHED -> result.success(null)
+                        MultiPointClickResumeResult.NO_ENABLED_TARGETS -> result.error(
+                            "no_enabled_targets",
+                            "请至少启用 1 个点位后再继续。",
+                            null,
+                        )
+                        MultiPointClickResumeResult.ACCESSIBILITY_SERVICE_UNAVAILABLE -> result.error(
                             "accessibility_service_unavailable",
-                            "无障碍服务未连接，或当前多点任务不是暂停状态，无法继续。",
+                            "无障碍服务未连接，请先在系统设置中开启 Float Clicker 无障碍服务。",
+                            null,
+                        )
+                        MultiPointClickResumeResult.INVALID_TASK_STATE -> result.error(
+                            "invalid_task_state",
+                            "当前多点任务状态不支持继续执行。",
                             null,
                         )
                     }

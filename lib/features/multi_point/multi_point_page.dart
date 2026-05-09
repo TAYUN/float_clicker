@@ -247,8 +247,21 @@ class _MultiPointPageState extends State<MultiPointPage> {
       if (!mounted) {
         return;
       }
+      final overlaySnapshot = await _permissionService
+          .getMultiPointOverlaySnapshot();
+      if (!mounted) {
+        return;
+      }
+      final nextConfiguration = _configurationFromSnapshot(
+        overlaySnapshot,
+        fallback: _configuration,
+      );
       setState(() {
-        _taskRunState = TaskRunState.running;
+        _configuration = nextConfiguration;
+        _isModeEnabled = overlaySnapshot.modeEnabled;
+        _taskRunState = overlaySnapshot.modeEnabled
+            ? overlaySnapshot.taskRunState
+            : TaskRunState.idle;
       });
     } on PlatformException catch (error) {
       _showPlatformError(error, fallback: '无法继续多点任务');

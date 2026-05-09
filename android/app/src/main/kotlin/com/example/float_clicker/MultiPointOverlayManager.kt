@@ -146,6 +146,7 @@ internal class MultiPointOverlayManager(
                 hide()
                 return
             }
+            updatePausedTask(resetCurrentRound = true)
             notifyOverlayStateChanged()
         } else {
             notifyOverlayStateChanged()
@@ -158,6 +159,7 @@ internal class MultiPointOverlayManager(
         repeatCount = settings.repeatCount.coerceAtLeast(1)
         infiniteLoop = settings.infiniteLoop
         tapDurationMs = settings.tapDurationMs.coerceAtLeast(1)
+        updatePausedTask(resetCurrentRound = false)
         notifyOverlayStateChanged()
     }
 
@@ -218,7 +220,7 @@ internal class MultiPointOverlayManager(
         return MultiPointClickScheduler.pause()
     }
 
-    fun resume(): Boolean {
+    fun resume(): MultiPointClickResumeResult {
         return MultiPointClickScheduler.resume()
     }
 
@@ -434,7 +436,7 @@ internal class MultiPointOverlayManager(
         val handled = when (taskStatus.taskRunState) {
             TaskRunState.IDLE -> start() == MultiPointClickStartResult.STARTED
             TaskRunState.RUNNING -> pause()
-            TaskRunState.PAUSED -> resume()
+            TaskRunState.PAUSED -> resume() == MultiPointClickResumeResult.RESUMED
         }
 
         if (!handled) {
@@ -473,6 +475,23 @@ internal class MultiPointOverlayManager(
         return AutomationTargetPosition(
             x = target.x + metrics.targetSizePx / 2f,
             y = target.y + metrics.targetSizePx / 2f,
+        )
+    }
+
+    private fun updatePausedTask(resetCurrentRound: Boolean) {
+        if (taskStatus.taskRunState != TaskRunState.PAUSED) {
+            return
+        }
+
+        MultiPointClickScheduler.updatePausedTask(
+            request = MultiPointClickTaskRequest(
+                targets = targets,
+                intervalMs = intervalMs,
+                repeatCount = repeatCount,
+                infiniteLoop = infiniteLoop,
+                tapDurationMs = tapDurationMs,
+            ),
+            resetCurrentRound = resetCurrentRound,
         )
     }
 

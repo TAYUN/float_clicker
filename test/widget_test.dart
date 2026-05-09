@@ -16,6 +16,10 @@ void main() {
   var nativeMultiPointOverlayEnabled = false;
   var nativeTaskRunState = 'idle';
   var nativeMultiPointTaskRunState = 'idle';
+  var nativeMultiPointCompletedRounds = 0;
+  var nativeMultiPointCurrentRound = 0;
+  var nativeMultiPointExecutedInRound = 0;
+  String? nativeMultiPointCurrentTargetId;
   var nativeExecutedCount = 0;
   var nativeOverlaySettings = <String, Object?>{};
   var nativeMultiPointSettings = <String, Object?>{};
@@ -130,6 +134,10 @@ void main() {
     nativeMultiPointOverlayEnabled = false;
     nativeTaskRunState = 'idle';
     nativeMultiPointTaskRunState = 'idle';
+    nativeMultiPointCompletedRounds = 0;
+    nativeMultiPointCurrentRound = 0;
+    nativeMultiPointExecutedInRound = 0;
+    nativeMultiPointCurrentTargetId = null;
     nativeExecutedCount = 0;
     nativeOverlaySettings = _defaultNativeOverlaySettings();
     nativeMultiPointSettings = _defaultNativeMultiPointSettings();
@@ -160,9 +168,15 @@ void main() {
             return {
               'modeEnabled': nativeMultiPointOverlayEnabled,
               'taskRunState': nativeMultiPointTaskRunState,
-              'completedRounds': 0,
-              'currentRound': 0,
-              'executedActionCountInCurrentRound': 0,
+              'completedRounds': nativeMultiPointCompletedRounds,
+              'currentRound': nativeMultiPointCurrentRound,
+              'executedActionCountInCurrentRound':
+                  nativeMultiPointExecutedInRound,
+              ...nativeMultiPointCurrentTargetId == null
+                  ? const <String, Object?>{}
+                  : {
+                      'currentTargetId': nativeMultiPointCurrentTargetId,
+                    },
               ...nativeMultiPointSettings,
             };
           }
@@ -207,6 +221,7 @@ void main() {
           }
           if (call.method == 'startMultiPointClicking') {
             nativeMultiPointTaskRunState = 'running';
+            nativeMultiPointCurrentRound = 1;
             return null;
           }
           if (call.method == 'pauseMultiPointClicking') {
@@ -214,11 +229,40 @@ void main() {
             return null;
           }
           if (call.method == 'resumeMultiPointClicking') {
+            final repeatCount =
+                (nativeMultiPointSettings['repeatCount'] as num?)?.toInt() ??
+                10;
+            final infiniteLoop =
+                nativeMultiPointSettings['infiniteLoop'] as bool? ?? false;
+            final targets =
+                nativeMultiPointSettings['targets'] as List<Object?>? ??
+                const [];
+            final hasEnabledTarget = targets.any(
+              (target) =>
+                  target is Map<Object?, Object?> && target['enabled'] == true,
+            );
+            if (!hasEnabledTarget) {
+              throw PlatformException(
+                code: 'no_enabled_targets',
+                message: '请至少启用 1 个点位后再继续。',
+              );
+            }
+            if (!infiniteLoop && nativeMultiPointCompletedRounds >= repeatCount) {
+              nativeMultiPointTaskRunState = 'idle';
+              nativeMultiPointCurrentRound = 0;
+              nativeMultiPointExecutedInRound = 0;
+              nativeMultiPointCurrentTargetId = null;
+              return null;
+            }
             nativeMultiPointTaskRunState = 'running';
             return null;
           }
           if (call.method == 'endMultiPointClicking') {
             nativeMultiPointTaskRunState = 'idle';
+            nativeMultiPointCompletedRounds = 0;
+            nativeMultiPointCurrentRound = 0;
+            nativeMultiPointExecutedInRound = 0;
+            nativeMultiPointCurrentTargetId = null;
             return null;
           }
           if (call.method == 'hideSinglePointOverlay') {
@@ -447,12 +491,16 @@ void main() {
     expect(find.text('继续任务'), findsOneWidget);
     expect(find.text('结束任务'), findsOneWidget);
 
+    nativeMultiPointSettings = {
+      ...nativeMultiPointSettings,
+      'repeatCount': 1,
+    };
+    nativeMultiPointCompletedRounds = 1;
+    nativeMultiPointCurrentRound = 2;
+    nativeMultiPointExecutedInRound = 0;
+
     await tester.tap(find.text('继续任务'));
     await tester.pumpAndSettle();
-
-    expect(find.text('正在点击'), findsOneWidget);
-
-    await tapVisibleText(tester, '结束任务');
 
     expect(find.text('多点编辑中'), findsOneWidget);
     expect(find.text('执行任务'), findsOneWidget);

@@ -42,14 +42,7 @@ internal object MultiPointClickScheduler {
             return MultiPointClickStartResult.ACCESSIBILITY_SERVICE_UNAVAILABLE
         }
 
-        val nextActions = request.enabledTargets()
-            .mapIndexed { index, target ->
-                AutomationAction.Tap(
-                    id = "multi_point_tap_${target.id}_$index",
-                    targetId = target.id,
-                    durationMs = request.tapDurationMs.toLong(),
-                )
-            }
+        val nextActions = buildActions(request)
         if (nextActions.isEmpty()) {
             return MultiPointClickStartResult.NO_ENABLED_TARGETS
         }
@@ -81,19 +74,58 @@ internal object MultiPointClickScheduler {
         return true
     }
 
-    fun resume(): Boolean {
+    fun resume(): MultiPointClickResumeResult {
         if (taskRunState != TaskRunState.PAUSED) {
-            return false
+            return MultiPointClickResumeResult.INVALID_TASK_STATE
         }
         if (!AccessibilityGestureExecutor.isServiceAvailable) {
-            return false
+            return MultiPointClickResumeResult.ACCESSIBILITY_SERVICE_UNAVAILABLE
+        }
+        if (actions.isEmpty()) {
+            return MultiPointClickResumeResult.NO_ENABLED_TARGETS
+        }
+        if (!infiniteLoop && completedRounds >= repeatCount) {
+            // 暂停中把有限循环次数改到已完成轮次以内时，继续等价于安全结束任务。
+            end()
+            return MultiPointClickResumeResult.FINISHED
         }
 
         setTaskRunState(TaskRunState.RUNNING)
         if (!isGestureInFlight) {
             runNext(taskGeneration)
         }
-        return true
+        return MultiPointClickResumeResult.RESUMED
+    }
+
+    fun updatePausedTask(
+        request: MultiPointClickTaskRequest,
+        resetCurrentRound: Boolean,
+    ): MultiPointClickUpdateResult {
+        if (taskRunState != TaskRunState.PAUSED) {
+            return MultiPointClickUpdateResult.IGNORED
+        }
+
+        actions = buildActions(request)
+        intervalMs = request.intervalMs.coerceAtLeast(50)
+        repeatCount = request.repeatCount.coerceAtLeast(1)
+        infiniteLoop = request.infiniteLoop
+
+        if (resetCurrentRound) {
+            // 暂停中点位结构变化后，保留 completedRounds，但当前轮从第一个启用点位重新开始。
+            currentActionIndex = 0
+            executedActionCountInCurrentRound = 0
+        } else if (currentActionIndex >= actions.size) {
+            currentActionIndex = 0
+            executedActionCountInCurrentRound = 0
+        }
+
+        currentTargetId = actions.getOrNull(currentActionIndex)?.targetId
+        notifyStatusChanged()
+        return if (actions.isEmpty()) {
+            MultiPointClickUpdateResult.NO_ENABLED_TARGETS
+        } else {
+            MultiPointClickUpdateResult.UPDATED
+        }
     }
 
     fun end() {
@@ -205,6 +237,17 @@ internal object MultiPointClickScheduler {
         onStatusChanged?.invoke(status)
     }
 
+    private fun buildActions(request: MultiPointClickTaskRequest): List<AutomationAction.Tap> {
+        return request.enabledTargets()
+            .mapIndexed { index, target ->
+                AutomationAction.Tap(
+                    id = "multi_point_tap_${target.id}_$index",
+                    targetId = target.id,
+                    durationMs = request.tapDurationMs.toLong(),
+                )
+            }
+    }
+
     private fun currentRoundForStatus(): Int {
         return if (taskRunState == TaskRunState.IDLE) {
             0
@@ -242,4 +285,18 @@ internal enum class MultiPointClickStartResult {
     NO_ENABLED_TARGETS,
     ACCESSIBILITY_SERVICE_UNAVAILABLE,
     INVALID_TASK_STATE,
+}
+
+internal enum class MultiPointClickResumeResult {
+    RESUMED,
+    FINISHED,
+    NO_ENABLED_TARGETS,
+    ACCESSIBILITY_SERVICE_UNAVAILABLE,
+    INVALID_TASK_STATE,
+}
+
+internal enum class MultiPointClickUpdateResult {
+    UPDATED,
+    NO_ENABLED_TARGETS,
+    IGNORED,
 }
