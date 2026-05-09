@@ -18,6 +18,7 @@ class FloatClickerAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {
         // 系统中断无障碍服务时，正在进行的点击任务必须停止。
         SinglePointClickScheduler.end()
+        MultiPointClickScheduler.end()
     }
 
     override fun onDestroy() {
@@ -25,6 +26,7 @@ class FloatClickerAccessibilityService : AccessibilityService() {
             instance = null
         }
         SinglePointClickScheduler.end()
+        MultiPointClickScheduler.end()
         AccessibilityServiceStateBus.notifyConnected(false)
         super.onDestroy()
     }
