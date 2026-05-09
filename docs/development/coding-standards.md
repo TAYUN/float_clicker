@@ -154,25 +154,22 @@ android/app/src/main/kotlin/com/example/float_clicker/
 P1：Flutter 多点模型和持久化已经完成。
 P2：Flutter 多点页面已经完成。
 P3：Android 多点 Overlay 已经完成。
+P4：通用手势执行与调度已经完成。
 
-当前推荐下一步是 P4.1：通用动作和手势执行器。
+当前推荐下一步是 P5 剩余专项验收。阶段细分和最新状态以 `docs/开发计划/多点模式开发阶段管理.md` 为准。
 
-P4.1 包含：
+P5 包含：
 
-- 定义 `AutomationAction`，第一版只包含 tap 动作。
-- 新增或抽出 `AccessibilityGestureExecutor`。
-- 统一处理 `dispatchGesture()` 返回 false、完成、取消和无障碍服务断开。
-- 保持单点模式现有行为不回退。
-- 为 P4.2 多点调度器预留接口，但不直接接入多点 UI。
+- 验证基础多点第一版联调链路。
+- 验证权限、互斥、全禁用点位、悬浮窗权限撤销、无障碍断开、横竖屏和单点回归。
+- 只修验收中发现的明确可复现问题。
 
-P4.1 不包含：
+P5 不包含：
 
-- `start/pause/resume/endMultiPointClicking` 真实多点调度接入。
-- `MultiPointClickScheduler` 或轮次进度。
-- 多点页面暂停编辑语义调整。
 - 高级连招 UI。
 - 多配置 profile。
 - 多个悬浮执行控件。
+- 文档外优化或新 UI 能力。
 
 ## 6. 格式化
 

@@ -124,7 +124,7 @@ float_clicker/android_permissions
 - `resumeMultiPointClicking`
 - `endMultiPointClicking`
 
-多点 Overlay 方法已接入；多点执行方法当前进入 P4 调度阶段，P4.1 只抽取通用手势执行器，不直接接多点 UI。
+多点 Overlay 和基础执行方法已接入；当前进入 P5 联调验收阶段，阶段细分和最新状态以 `docs/开发计划/多点模式开发阶段管理.md` 为准。
 
 ## 5. 单点模式状态流
 
@@ -183,17 +183,18 @@ Flutter MultiPointSettingsStore
 - Android 多点 Overlay、点位组件和控制组件复用
 - 点位和控制组件位置回传
 - 多点横竖屏边界、单点/多点互斥、权限撤销和窗口异常处理
+- 通用手势执行器和基础多点顺序调度
+- 多点 `start/pause/resume/endMultiPointClicking` 三态控制接入
 
-当前推荐下一步是 P4.1：通用动作和手势执行器。
+当前推荐下一步是 P5 剩余专项验收。
 
-P4.1 只做：
+P5 只做：
 
-- `AutomationAction` tap 动作模型。
-- `AccessibilityGestureExecutor`。
-- 统一处理 `dispatchGesture()` 返回 false、完成、取消和服务断开。
-- 保持单点模式现有行为不回退。
+- 验证基础多点第一版联调链路。
+- 验证权限、互斥、全禁用点位、悬浮窗权限撤销、无障碍断开、横竖屏和单点回归。
+- 只修验收中发现的明确可复现问题。
 
-P4.1 不接入多点 UI，不实现 `MultiPointClickScheduler`、轮次进度或暂停编辑语义。
+P5 不进入多配置、高级连招、多执行控件或文档外新 UI 能力。
 
 ## 8. 后期多配置执行
 

@@ -10,6 +10,7 @@ developer_instructions = """
 - 防止后期能力混入当前阶段，例如多配置执行混入基础多点第一版。
 - 拆分任务，控制实现边界。
 - 给出可验证的验收标准。
+- 需要形成计划时，在 docs/开发计划/Codex协作记录/ 下新建或更新本轮记录，先写 Summary、Scope、Plan、Acceptance Criteria、Assumptions。
 - 发现风险、依赖、单点回归风险和需要用户确认的问题。
 - 如果设计需要调整，要求同步更新需求文档、阶段管理文档和验收标准。
 
@@ -18,4 +19,5 @@ developer_instructions = """
 - 验收标准。
 - 明确不做的内容。
 - 风险和假设。
+- 本轮 Codex 协作记录路径。
 """

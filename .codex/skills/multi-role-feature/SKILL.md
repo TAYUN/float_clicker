@@ -14,6 +14,7 @@ description: Float Clicker 复杂功能、多阶段任务、跨 Flutter/Android 
 - 需要先确认需求边界再实现的任务。
 - 需要把实现、验证和阶段管理分开的任务。
 - 需要保护单点模式回归的任务。
+- 需要在计划模式下沉淀计划、执行和验收记录的任务。
 
 小型文档修改或单文件修复可以不用完整多角色流程，但仍要先检查 `git status`。
 
@@ -29,6 +30,7 @@ description: Float Clicker 复杂功能、多阶段任务、跨 Flutter/Android 
    - 明确当前属于哪个阶段，例如 P1 / P2 / P3。
    - 明确本次做什么、不做什么。
    - 明确验收标准和需要更新的文档。
+   - 需要形成计划时，在 `docs/开发计划/Codex协作记录/` 新建或更新本轮记录，先写 Summary、Scope、Plan、Acceptance Criteria、Assumptions。
    - 如果需求和文档冲突，先提出调整建议，不直接编码。
 
 3. Builder 实施改动。
@@ -42,32 +44,39 @@ description: Float Clicker 复杂功能、多阶段任务、跨 Flutter/Android 
    - Android 原生改动至少考虑 `flutter build apk --debug`。
    - 悬浮窗、权限、无障碍和横竖屏行为需要列出真机验收项。
    - 单点模式受影响时，参考 `docs/验收清单/单点模式真机验收清单.md` 回归。
+   - 将验证命令、真机步骤、通过/失败项、未验证风险补充到本轮 Codex 协作记录。
 
 5. Reporter 交付总结。
    - 汇总改动、验证、风险和关键文件。
    - 如果完成阶段任务，说明更新了阶段管理文档。
+   - 确认是否更新了本轮 Codex 协作记录，并在交付中标注路径。
    - 如果有未验证项，明确原因和后续建议。
 
 ## 本项目阶段边界提醒
 
-当前状态：P1 Flutter 多点模型与持久化、P2 Flutter 多点页面、P3 Android 多点 Overlay 均已完成；P4 通用手势执行与调度进行中，推荐下一步是 P4.1 通用动作和手势执行器。
+当前状态：P1 Flutter 多点模型与持久化、P2 Flutter 多点页面、P3 Android 多点 Overlay、P4 通用手势执行与调度均已完成；P5 多点联调与真机验收进行中。
 
-P4.1 只做：
+P5 只做：
 
-- 定义 `AutomationAction`，第一版只包含 tap 动作。
-- 新增或抽出 `AccessibilityGestureExecutor`。
-- 统一处理 `dispatchGesture()` 返回 false、完成、取消和无障碍服务断开。
-- 保持单点模式现有行为不回退。
-- 为 P4.2 多点调度器预留接口，但不直接接入多点 UI。
+- 基础多点第一版的联调、真机验收、回归和风险收敛。
+- 验证权限、互斥、全禁用点位、悬浮窗权限撤销、无障碍断开、横竖屏和单点回归。
+- 只修验收中发现的明确可复现问题。
+- 同步更新阶段管理文档和 `docs/开发计划/Codex协作记录/` 下的本轮记录。
 
-P4.1 不做：
+P5 不做：
 
-- 接入 `start/pause/resume/endMultiPointClicking` 的真实多点调度。
-- 实现 `MultiPointClickScheduler` 或轮次进度。
-- 调整多点页面暂停编辑语义。
 - 高级连招 UI。
 - 多配置 profile。
 - 多个悬浮执行控件。
+- 文档外优化或新 UI 能力。
+
+## 计划与执行记录
+
+- 目录：`docs/开发计划/Codex协作记录/`。
+- 命名：`P阶段 任务名.md`，例如 `P5 剩余专项验收执行记录.md`。
+- 计划阶段先写：Summary、Scope、Plan、Acceptance Criteria、Assumptions。
+- 执行后补写：Implementation Changes、Verification、Issues、Risks、Next Steps。
+- 阶段总状态仍写入 `docs/开发计划/多点模式开发阶段管理.md`，不要把流水记录塞进阶段总表。
 
 ## 发任务模板
 
@@ -92,6 +101,7 @@ P4.1 不做：
 - 不影响单点模式稳定行为。
 - 改后必须验证。
 - 如完成阶段任务，更新 docs/开发计划/多点模式开发阶段管理.md。
+- 如进入计划模式或 P 阶段验收，更新 docs/开发计划/Codex协作记录/ 下的本轮记录。
 
 完成标准：
 - 功能可用或文档更新完整。
@@ -112,6 +122,9 @@ P4.1 不做：
 - ...
 
 风险与未完成项：
+- ...
+
+Codex 协作记录：
 - ...
 
 关键文件：
