@@ -283,6 +283,7 @@ internal class MultiPointOverlayManager(
                 return false
             }
         }
+        syncTargetTouchableState()
         return true
     }
 
@@ -423,6 +424,7 @@ internal class MultiPointOverlayManager(
 
     private fun handleSchedulerStatusChanged(status: MultiPointTaskStatus) {
         taskStatus = if (isModeEnabled) status else MultiPointTaskStatus()
+        syncTargetTouchableState()
         refreshTaskActionState()
         notifyOverlayStateChanged()
     }
@@ -430,6 +432,13 @@ internal class MultiPointOverlayManager(
     private fun refreshTaskActionState() {
         toolbarComponent.updateTaskRunState(taskStatus.taskRunState)
         actionButtonComponent.updateTaskRunState(taskStatus.taskRunState)
+    }
+
+    private fun syncTargetTouchableState() {
+        val canDragTargets = taskStatus.taskRunState != TaskRunState.RUNNING
+        targetComponents.values.forEach { component ->
+            component.setTouchable(canDragTargets)
+        }
     }
 
     private fun toggleTaskRunState() {
