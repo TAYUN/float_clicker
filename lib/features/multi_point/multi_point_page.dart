@@ -168,6 +168,9 @@ class _MultiPointPageState extends State<MultiPointPage> {
 
     await _saveConfiguration(result.configuration);
     if (_isModeEnabled) {
+      await _permissionService.updateMultiPointSettings(
+        result.configuration.settings,
+      );
       await _permissionService.updateMultiPointOverlayUiSettings(
         result.configuration.overlayUiSettings,
       );
@@ -213,8 +216,56 @@ class _MultiPointPageState extends State<MultiPointPage> {
 
     try {
       await _permissionService.startMultiPointClicking();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _taskRunState = TaskRunState.running;
+      });
     } on PlatformException catch (error) {
       _showPlatformError(error, fallback: '无法执行多点任务');
+    }
+  }
+
+  Future<void> _pauseTask() async {
+    try {
+      await _permissionService.pauseMultiPointClicking();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _taskRunState = TaskRunState.paused;
+      });
+    } on PlatformException catch (error) {
+      _showPlatformError(error, fallback: '无法暂停多点任务');
+    }
+  }
+
+  Future<void> _resumeTask() async {
+    try {
+      await _permissionService.resumeMultiPointClicking();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _taskRunState = TaskRunState.running;
+      });
+    } on PlatformException catch (error) {
+      _showPlatformError(error, fallback: '无法继续多点任务');
+    }
+  }
+
+  Future<void> _endTask() async {
+    try {
+      await _permissionService.endMultiPointClicking();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _taskRunState = TaskRunState.idle;
+      });
+    } on PlatformException catch (error) {
+      _showPlatformError(error, fallback: '无法结束多点任务');
     }
   }
 
@@ -299,8 +350,12 @@ class _MultiPointPageState extends State<MultiPointPage> {
   void _showPlatformError(PlatformException error, {required String fallback}) {
     final message = switch (error.code) {
       'mode_conflict' => '单点模式已开启，请先关闭单点模式。',
+      'no_enabled_targets' => '请至少启用 1 个点位后再执行。',
       'overlay_permission_denied' => '悬浮窗权限未开启，请先在系统设置中允许显示在其他应用上层。',
       'overlay_window_unavailable' => '多点悬浮窗创建失败，请确认悬浮窗权限仍然可用后重试。',
+      'accessibility_service_unavailable' =>
+        '无障碍服务未连接，请先在系统设置中开启 Float Clicker 无障碍服务。',
+      'invalid_task_state' => '当前任务状态不支持该操作，请根据页面状态重新执行。',
       'unimplemented_method' => error.message ?? 'Android 多点点击调度尚未实现。',
       _ =>
         (error.message?.trim().isNotEmpty ?? false)
@@ -376,15 +431,68 @@ class _MultiPointPageState extends State<MultiPointPage> {
                   ),
                   if (_isModeEnabled) ...[
                     const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: _startTask,
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('执行任务'),
+                    _TaskControls(
+                      taskRunState: _taskRunState,
+                      onStart: _startTask,
+                      onPause: _pauseTask,
+                      onResume: _resumeTask,
+                      onEnd: _endTask,
                     ),
                   ],
                 ],
               ),
       ),
+    );
+  }
+}
+
+class _TaskControls extends StatelessWidget {
+  const _TaskControls({
+    required this.taskRunState,
+    required this.onStart,
+    required this.onPause,
+    required this.onResume,
+    required this.onEnd,
+  });
+
+  final TaskRunState taskRunState;
+  final VoidCallback onStart;
+  final VoidCallback onPause;
+  final VoidCallback onResume;
+  final VoidCallback onEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (taskRunState == TaskRunState.idle)
+          OutlinedButton.icon(
+            onPressed: onStart,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('执行任务'),
+          ),
+        if (taskRunState == TaskRunState.running)
+          OutlinedButton.icon(
+            onPressed: onPause,
+            icon: const Icon(Icons.pause),
+            label: const Text('暂停任务'),
+          ),
+        if (taskRunState == TaskRunState.paused)
+          OutlinedButton.icon(
+            onPressed: onResume,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('继续任务'),
+          ),
+        if (taskRunState != TaskRunState.idle) ...[
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: onEnd,
+            icon: const Icon(Icons.stop),
+            label: const Text('结束任务'),
+          ),
+        ],
+      ],
     );
   }
 }

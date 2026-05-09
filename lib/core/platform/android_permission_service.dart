@@ -377,6 +377,14 @@ class AndroidPermissionService {
     );
   }
 
+  Future<void> updateMultiPointSettings(MultiPointSettings settings) async {
+    await _invokeAndroidOnly(
+      'updateMultiPointSettings',
+      arguments: _multiPointSettingsArguments(settings),
+      ignoreMissingPlugin: true,
+    );
+  }
+
   Future<void> updateMultiPointOverlayUiSettings(
     MultiPointOverlayUiSettings settings,
   ) async {
@@ -403,6 +411,18 @@ class AndroidPermissionService {
 
   Future<void> startMultiPointClicking() async {
     await _invokeAndroidOnly('startMultiPointClicking');
+  }
+
+  Future<void> pauseMultiPointClicking() async {
+    await _invokeAndroidOnly('pauseMultiPointClicking');
+  }
+
+  Future<void> resumeMultiPointClicking() async {
+    await _invokeAndroidOnly('resumeMultiPointClicking');
+  }
+
+  Future<void> endMultiPointClicking() async {
+    await _invokeAndroidOnly('endMultiPointClicking');
   }
 
   Future<void> pauseSinglePointClicking() async {

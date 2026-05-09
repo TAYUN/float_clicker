@@ -46,8 +46,8 @@ internal class MultiPointOverlayManager(
             overlayUiState = overlayUiState.copy(toolbarPosition = point)
             notifyOverlayStateChanged()
         },
-        onTaskAction = ::showTaskUnavailableMessage,
-        onEndTask = ::showTaskUnavailableMessage,
+        onTaskAction = ::toggleTaskRunState,
+        onEndTask = ::endFromToolbar,
         onClose = ::hide,
         onCollapse = ::collapseToolbar,
         closeContentDescription = "关闭多点模式",
@@ -67,14 +67,19 @@ internal class MultiPointOverlayManager(
             overlayUiState = overlayUiState.copy(actionButtonPosition = point)
             notifyOverlayStateChanged()
         },
-        onTaskAction = ::showTaskUnavailableMessage,
-        onEndTask = ::showTaskUnavailableMessage,
+        onTaskAction = ::toggleTaskRunState,
+        onEndTask = ::endFromActionButton,
     )
 
+    private var taskStatus = MultiPointTaskStatus()
     private var overlayUiState = MultiPointOverlayUiState()
     private var appearanceSettings = OverlayAppearanceSettings()
     private var metrics = OverlayComponentMetrics(overlay, appearanceSettings)
     private var targets = defaultMultiPointTargets()
+    private var intervalMs = 500
+    private var repeatCount = 10
+    private var infiniteLoop = false
+    private var tapDurationMs = 50
     private var isModeEnabled = false
     private var isDisplayListenerRegistered = false
 
@@ -84,7 +89,15 @@ internal class MultiPointOverlayManager(
     val snapshot: MultiPointOverlaySnapshot
         get() = MultiPointOverlaySnapshot(
             modeEnabled = isModeEnabled,
-            taskRunState = TaskRunState.IDLE,
+            taskRunState = if (isModeEnabled) taskStatus.taskRunState else TaskRunState.IDLE,
+            completedRounds = if (isModeEnabled) taskStatus.completedRounds else 0,
+            currentRound = if (isModeEnabled) taskStatus.currentRound else 0,
+            executedActionCountInCurrentRound = if (isModeEnabled) {
+                taskStatus.executedActionCountInCurrentRound
+            } else {
+                0
+            },
+            currentTargetId = if (isModeEnabled) taskStatus.currentTargetId else null,
             targets = targets,
             overlayUiState = if (isModeEnabled) overlayUiState else null,
         )
@@ -107,6 +120,7 @@ internal class MultiPointOverlayManager(
     }
 
     fun hide() {
+        end()
         isModeEnabled = false
         // 关闭模式后取消已排队的横竖屏刷新，避免窗口移除后又被延迟任务重新触发布局更新。
         mainHandler.removeCallbacks(displayBoundsRefreshRunnable)
@@ -128,16 +142,23 @@ internal class MultiPointOverlayManager(
     fun updateTargets(nextTargets: List<MultiPointTargetState>) {
         targets = normalizedTargets(nextTargets)
         if (isModeEnabled) {
-            show(
-                MultiPointOverlaySettings(
-                    targets = targets,
-                    overlayUiState = overlayUiState,
-                    appearanceSettings = appearanceSettings,
-                ),
-            )
+            if (!refreshTargetComponents()) {
+                hide()
+                return
+            }
+            notifyOverlayStateChanged()
         } else {
             notifyOverlayStateChanged()
         }
+    }
+
+    fun updateClickSettings(settings: MultiPointOverlaySettings) {
+        // 多点悬浮层已开启后，设置页保存的点击参数需要同步到原生侧，下一次执行才会使用新配置。
+        intervalMs = settings.intervalMs.coerceAtLeast(50)
+        repeatCount = settings.repeatCount.coerceAtLeast(1)
+        infiniteLoop = settings.infiniteLoop
+        tapDurationMs = settings.tapDurationMs.coerceAtLeast(1)
+        notifyOverlayStateChanged()
     }
 
     fun updateOverlayUiState(state: MultiPointOverlayUiState) {
@@ -171,7 +192,57 @@ internal class MultiPointOverlayManager(
         handleDisplayBoundsChanged()
     }
 
+    fun start(): MultiPointClickStartResult {
+        if (!isModeEnabled) {
+            return MultiPointClickStartResult.INVALID_TASK_STATE
+        }
+
+        val result = MultiPointClickScheduler.start(
+            request = MultiPointClickTaskRequest(
+                targets = targets,
+                intervalMs = intervalMs,
+                repeatCount = repeatCount,
+                infiniteLoop = infiniteLoop,
+                tapDurationMs = tapDurationMs,
+            ),
+            targetPositionProvider = AutomationTargetPositionProvider(::targetCenterOnScreen),
+            onStatusChanged = ::handleSchedulerStatusChanged,
+        )
+        if (result == MultiPointClickStartResult.STARTED) {
+            refreshTaskActionState()
+        }
+        return result
+    }
+
+    fun pause(): Boolean {
+        return MultiPointClickScheduler.pause()
+    }
+
+    fun resume(): Boolean {
+        return MultiPointClickScheduler.resume()
+    }
+
+    fun end() {
+        MultiPointClickScheduler.end()
+        if (taskStatus.taskRunState != TaskRunState.IDLE || taskStatus.completedRounds != 0) {
+            handleSchedulerStatusChanged(MultiPointTaskStatus())
+        }
+    }
+
+    fun handleAccessibilityServiceDisconnected() {
+        if (taskStatus.taskRunState == TaskRunState.IDLE) {
+            return
+        }
+
+        end()
+        Toast.makeText(context.applicationContext, "无障碍服务已断开，多点任务已结束", Toast.LENGTH_SHORT).show()
+    }
+
     private fun applySettings(settings: MultiPointOverlaySettings) {
+        intervalMs = settings.intervalMs.coerceAtLeast(50)
+        repeatCount = settings.repeatCount.coerceAtLeast(1)
+        infiniteLoop = settings.infiniteLoop
+        tapDurationMs = settings.tapDurationMs.coerceAtLeast(1)
         overlayUiState = settings.overlayUiState
         appearanceSettings = settings.appearanceSettings.normalized
         metrics = OverlayComponentMetrics(overlay, appearanceSettings)
@@ -228,7 +299,7 @@ internal class MultiPointOverlayManager(
         if (overlayUiState.shouldShowToolbar()) {
             toolbarComponent.show(
                 position = overlayUiState.toolbarPosition,
-                taskRunState = TaskRunState.IDLE,
+                taskRunState = taskStatus.taskRunState,
                 canCollapse = overlayUiState.interactionMode == OverlayInteractionMode.COMPACT,
                 metrics = metrics,
             )
@@ -251,7 +322,7 @@ internal class MultiPointOverlayManager(
         if (overlayUiState.shouldShowActionButton()) {
             actionButtonComponent.show(
                 position = overlayUiState.actionButtonPosition,
-                taskRunState = TaskRunState.IDLE,
+                taskRunState = taskStatus.taskRunState,
                 metrics = metrics,
             )
             if (!actionButtonComponent.isShowing) {
@@ -260,6 +331,7 @@ internal class MultiPointOverlayManager(
         } else {
             actionButtonComponent.remove()
         }
+        refreshTaskActionState()
         return true
     }
 
@@ -283,10 +355,6 @@ internal class MultiPointOverlayManager(
         overlayUiState = overlayUiState.copy(isToolbarCollapsed = false)
         refreshInteractionViews()
         notifyOverlayStateChanged()
-    }
-
-    private fun showTaskUnavailableMessage() {
-        Toast.makeText(context.applicationContext, "多点点击调度尚未实现", Toast.LENGTH_SHORT).show()
     }
 
     private fun handleTargetPositionChanged(targetId: String, point: OverlayPoint) {
@@ -349,6 +417,63 @@ internal class MultiPointOverlayManager(
         if (nextTargets != targets) {
             targets = nextTargets
         }
+    }
+
+    private fun handleSchedulerStatusChanged(status: MultiPointTaskStatus) {
+        taskStatus = if (isModeEnabled) status else MultiPointTaskStatus()
+        refreshTaskActionState()
+        notifyOverlayStateChanged()
+    }
+
+    private fun refreshTaskActionState() {
+        toolbarComponent.updateTaskRunState(taskStatus.taskRunState)
+        actionButtonComponent.updateTaskRunState(taskStatus.taskRunState)
+    }
+
+    private fun toggleTaskRunState() {
+        val handled = when (taskStatus.taskRunState) {
+            TaskRunState.IDLE -> start() == MultiPointClickStartResult.STARTED
+            TaskRunState.RUNNING -> pause()
+            TaskRunState.PAUSED -> resume()
+        }
+
+        if (!handled) {
+            showTaskActionFailure()
+        }
+    }
+
+    private fun endFromToolbar() {
+        end()
+        Toast.makeText(context.applicationContext, "多点任务已结束", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun endFromActionButton() {
+        if (taskStatus.taskRunState == TaskRunState.IDLE) {
+            Toast.makeText(context.applicationContext, "当前没有正在执行的多点任务", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        end()
+        Toast.makeText(context.applicationContext, "多点任务已结束", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showTaskActionFailure() {
+        val message = when (taskStatus.taskRunState) {
+            TaskRunState.IDLE -> "无法开始多点任务，请检查无障碍服务和启用点位"
+            TaskRunState.RUNNING -> "当前任务状态已变化，无法暂停"
+            TaskRunState.PAUSED -> "无障碍服务未连接，无法继续多点任务"
+        }
+        Toast.makeText(context.applicationContext, message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun targetCenterOnScreen(targetId: String): AutomationTargetPosition? {
+        targetComponents[targetId]?.centerOnScreen()?.let { return it }
+        val target = targets.firstOrNull { it.id == targetId } ?: return null
+        // 正常执行时会从悬浮 View 读取真实屏幕中心；这里仅作为窗口短暂刷新期间的兜底。
+        return AutomationTargetPosition(
+            x = target.x + metrics.targetSizePx / 2f,
+            y = target.y + metrics.targetSizePx / 2f,
+        )
     }
 
     private fun coerceInteractionPositionsToScreen() {

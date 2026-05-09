@@ -45,6 +45,9 @@ class MainActivity : FlutterActivity() {
         if (!isConnected && ::singlePointOverlayManager.isInitialized) {
             singlePointOverlayManager.handleAccessibilityServiceDisconnected()
         }
+        if (!isConnected && ::multiPointOverlayManager.isInitialized) {
+            multiPointOverlayManager.handleAccessibilityServiceDisconnected()
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -195,15 +198,57 @@ class MainActivity : FlutterActivity() {
                     multiPointOverlayManager.updateTargets(multiPointTargetsFrom(call.arguments))
                     result.success(null)
                 }
+                "updateMultiPointSettings" -> {
+                    multiPointOverlayManager.updateClickSettings(multiPointOverlaySettingsFrom(call.arguments))
+                    result.success(null)
+                }
                 "updateMultiPointOverlayUiSettings" -> {
                     multiPointOverlayManager.updateOverlayUiState(multiPointOverlayUiStateFrom(call.arguments))
                     result.success(null)
                 }
-                "startMultiPointClicking",
-                "pauseMultiPointClicking",
-                "resumeMultiPointClicking",
+                "startMultiPointClicking" -> {
+                    when (multiPointOverlayManager.start()) {
+                        MultiPointClickStartResult.STARTED -> result.success(null)
+                        MultiPointClickStartResult.NO_ENABLED_TARGETS -> result.error(
+                            "no_enabled_targets",
+                            "请至少启用 1 个点位后再执行。",
+                            null,
+                        )
+                        MultiPointClickStartResult.ACCESSIBILITY_SERVICE_UNAVAILABLE -> result.error(
+                            "accessibility_service_unavailable",
+                            "无障碍服务未连接，请先在系统设置中开启 Float Clicker 无障碍服务。",
+                            null,
+                        )
+                        MultiPointClickStartResult.INVALID_TASK_STATE -> result.error(
+                            "invalid_task_state",
+                            "当前多点任务状态不支持开始执行。",
+                            null,
+                        )
+                    }
+                }
+                "pauseMultiPointClicking" -> {
+                    val paused = multiPointOverlayManager.pause()
+                    if (paused) {
+                        result.success(null)
+                    } else {
+                        result.error("invalid_task_state", "当前没有正在执行的多点任务，无法暂停。", null)
+                    }
+                }
+                "resumeMultiPointClicking" -> {
+                    val resumed = multiPointOverlayManager.resume()
+                    if (resumed) {
+                        result.success(null)
+                    } else {
+                        result.error(
+                            "accessibility_service_unavailable",
+                            "无障碍服务未连接，或当前多点任务不是暂停状态，无法继续。",
+                            null,
+                        )
+                    }
+                }
                 "endMultiPointClicking" -> {
-                    result.error("unimplemented_method", "Android 多点点击调度尚未实现。", null)
+                    multiPointOverlayManager.end()
+                    result.success(null)
                 }
                 else -> result.notImplemented()
             }

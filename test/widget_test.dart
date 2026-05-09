@@ -198,11 +198,28 @@ void main() {
             };
             return null;
           }
+          if (call.method == 'updateMultiPointSettings') {
+            nativeMultiPointSettings = {
+              ...nativeMultiPointSettings,
+              ..._objectMap(call.arguments),
+            };
+            return null;
+          }
           if (call.method == 'startMultiPointClicking') {
-            throw PlatformException(
-              code: 'unimplemented_method',
-              message: 'Android 多点点击调度尚未实现。',
-            );
+            nativeMultiPointTaskRunState = 'running';
+            return null;
+          }
+          if (call.method == 'pauseMultiPointClicking') {
+            nativeMultiPointTaskRunState = 'paused';
+            return null;
+          }
+          if (call.method == 'resumeMultiPointClicking') {
+            nativeMultiPointTaskRunState = 'running';
+            return null;
+          }
+          if (call.method == 'endMultiPointClicking') {
+            nativeMultiPointTaskRunState = 'idle';
+            return null;
           }
           if (call.method == 'hideSinglePointOverlay') {
             nativeOverlayEnabled = false;
@@ -407,6 +424,38 @@ void main() {
     await tapVisibleText(tester, '执行任务');
 
     expect(find.text('请至少启用 1 个点位后再执行。'), findsOneWidget);
+  });
+
+  testWidgets('Multi point page exposes pause resume and end actions', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+    await tester.tap(find.text('开启多点悬浮层'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('执行任务'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('正在点击'), findsOneWidget);
+    expect(find.text('暂停任务'), findsOneWidget);
+
+    await tester.tap(find.text('暂停任务'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('已暂停'), findsOneWidget);
+    expect(find.text('继续任务'), findsOneWidget);
+    expect(find.text('结束任务'), findsOneWidget);
+
+    await tester.tap(find.text('继续任务'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('正在点击'), findsOneWidget);
+
+    await tapVisibleText(tester, '结束任务');
+
+    expect(find.text('多点编辑中'), findsOneWidget);
+    expect(find.text('执行任务'), findsOneWidget);
   });
 
   testWidgets('Multi point target position callback is persisted', (

@@ -65,6 +65,17 @@ internal class MultiPointTargetOverlayComponent(
         overlayWindow.moveTo(view, params, position)
     }
 
+    fun centerOnScreen(): AutomationTargetPosition? {
+        val targetView = view ?: return null
+        val location = IntArray(2)
+        // 多点持久化保存左上角；执行手势时统一换算成当前 View 的屏幕中心点。
+        targetView.getLocationOnScreen(location)
+        return AutomationTargetPosition(
+            x = location[0] + targetView.width / 2f,
+            y = location[1] + targetView.height / 2f,
+        )
+    }
+
     fun updateMetrics(metrics: OverlayComponentMetrics) {
         this.metrics = metrics
         val targetView = view ?: return
