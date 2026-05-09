@@ -1,6 +1,5 @@
 package com.example.float_clicker
 
-import android.content.ComponentName
 import android.content.res.Configuration
 import android.content.Intent
 import android.net.Uri
@@ -290,8 +289,8 @@ class MainActivity : FlutterActivity() {
 
     private fun getPermissionSnapshot(): Map<String, Boolean> {
         return mapOf(
-            "accessibilityGranted" to isAccessibilityServiceEnabled(),
-            "accessibilityConnected" to (FloatClickerAccessibilityService.instance != null),
+            "accessibilityGranted" to AccessibilityServiceStateHelper.isAccessibilityServiceEnabled(this),
+            "accessibilityConnected" to AccessibilityServiceStateHelper.isAccessibilityServiceConnected(),
             "overlayGranted" to canDrawOverlays(),
         )
     }
@@ -397,20 +396,6 @@ class MainActivity : FlutterActivity() {
             x = (map[xKey] as? Number)?.toInt() ?: fallback.x,
             y = (map[yKey] as? Number)?.toInt() ?: fallback.y,
         )
-    }
-
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val expectedService = ComponentName(this, FloatClickerAccessibilityService::class.java)
-            .flattenToString()
-        val enabledServices = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-        ) ?: return false
-
-        // 系统保存的是冒号分隔的服务列表，逐项比较能避免包名局部匹配造成误判。
-        return enabledServices.split(':').any { serviceName ->
-            serviceName.equals(expectedService, ignoreCase = true)
-        }
     }
 
     private fun canDrawOverlays(): Boolean {

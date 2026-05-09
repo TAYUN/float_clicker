@@ -91,28 +91,26 @@ class _ClickerPageState extends State<ClickerPage> with WidgetsBindingObserver {
   Future<void> _loadSavedSettings() async {
     final settings = await _settingsStore.loadSinglePointSettings();
     final appearanceSettings = await _appearanceStore.load();
-    final permissionSnapshot = await _permissionService.getSnapshot();
-    final overlaySnapshot = await _permissionService
-        .getSinglePointOverlaySnapshot();
+    final refreshResult = await _permissionService
+        .refreshSinglePointStateWithAccessibilityRetry();
     if (!mounted) {
       return;
     }
 
-    _applyPermissionSnapshot(permissionSnapshot, reportChanges: false);
+    _applyPermissionSnapshot(
+      refreshResult.permissionSnapshot,
+      reportChanges: false,
+    );
     _appearanceSettings = appearanceSettings;
     _controller.updateSinglePointSettings(settings);
-    if (!permissionSnapshot.overlayGranted) {
+    if (!refreshResult.permissionSnapshot.overlayGranted) {
       _controller.setSinglePointModeState(isEnabled: false);
     } else {
-      await _applyOverlayUiSettingsFromSnapshot(overlaySnapshot);
+      await _applyOverlayUiSettingsFromSnapshot(refreshResult.overlaySnapshot);
       _controller.setSinglePointModeState(
-        isEnabled: overlaySnapshot.isEnabled,
-        taskRunState: permissionSnapshot.accessibilityConnected
-            ? overlaySnapshot.taskRunState
-            : TaskRunState.idle,
-        executedCount: permissionSnapshot.accessibilityConnected
-            ? overlaySnapshot.executedCount
-            : 0,
+        isEnabled: refreshResult.overlaySnapshot.isEnabled,
+        taskRunState: refreshResult.overlaySnapshot.taskRunState,
+        executedCount: refreshResult.overlaySnapshot.executedCount,
       );
     }
     setState(() {
@@ -123,31 +121,26 @@ class _ClickerPageState extends State<ClickerPage> with WidgetsBindingObserver {
   Future<void> _refreshNativeState({
     required bool reportPermissionChanges,
   }) async {
-    final permissionSnapshot = await _permissionService.getSnapshot();
-    final overlaySnapshot = await _permissionService
-        .getSinglePointOverlaySnapshot();
+    final refreshResult = await _permissionService
+        .refreshSinglePointStateWithAccessibilityRetry();
     if (!mounted) {
       return;
     }
 
     _applyPermissionSnapshot(
-      permissionSnapshot,
+      refreshResult.permissionSnapshot,
       reportChanges: reportPermissionChanges,
     );
-    if (!permissionSnapshot.overlayGranted) {
+    if (!refreshResult.permissionSnapshot.overlayGranted) {
       _controller.setSinglePointModeState(isEnabled: false);
       return;
     }
 
-    await _applyOverlayUiSettingsFromSnapshot(overlaySnapshot);
+    await _applyOverlayUiSettingsFromSnapshot(refreshResult.overlaySnapshot);
     _controller.setSinglePointModeState(
-      isEnabled: overlaySnapshot.isEnabled,
-      taskRunState: permissionSnapshot.accessibilityConnected
-          ? overlaySnapshot.taskRunState
-          : TaskRunState.idle,
-      executedCount: permissionSnapshot.accessibilityConnected
-          ? overlaySnapshot.executedCount
-          : 0,
+      isEnabled: refreshResult.overlaySnapshot.isEnabled,
+      taskRunState: refreshResult.overlaySnapshot.taskRunState,
+      executedCount: refreshResult.overlaySnapshot.executedCount,
     );
   }
 

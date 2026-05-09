@@ -43,6 +43,16 @@ class AndroidPermissionSnapshot {
   );
 }
 
+class AndroidNativeRefreshResult<T> {
+  const AndroidNativeRefreshResult({
+    required this.permissionSnapshot,
+    required this.overlaySnapshot,
+  });
+
+  final AndroidPermissionSnapshot permissionSnapshot;
+  final T overlaySnapshot;
+}
+
 class SinglePointOverlaySnapshot {
   const SinglePointOverlaySnapshot({
     required this.isEnabled,
@@ -232,6 +242,13 @@ class AndroidPermissionService {
   final MethodChannel _channel;
   final Object _listenerKey = Object();
 
+  static const List<Duration> _accessibilityReconnectRetrySchedule = [
+    Duration.zero,
+    Duration(milliseconds: 300),
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+  ];
+
   Future<AndroidPermissionSnapshot> getSnapshot() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       // 当前能力只存在于 Android。其他平台返回“未授权”快照，让 UI 走普通不可用状态。
@@ -340,6 +357,20 @@ class AndroidPermissionService {
     } on MissingPluginException {
       return MultiPointOverlaySnapshot.disabled;
     }
+  }
+
+  Future<AndroidNativeRefreshResult<SinglePointOverlaySnapshot>>
+  refreshSinglePointStateWithAccessibilityRetry() {
+    return _refreshNativeStateWithAccessibilityRetry(
+      getOverlaySnapshot: getSinglePointOverlaySnapshot,
+    );
+  }
+
+  Future<AndroidNativeRefreshResult<MultiPointOverlaySnapshot>>
+  refreshMultiPointStateWithAccessibilityRetry() {
+    return _refreshNativeStateWithAccessibilityRetry(
+      getOverlaySnapshot: getMultiPointOverlaySnapshot,
+    );
   }
 
   Future<void> updateSinglePointSettings({
@@ -654,5 +685,34 @@ class AndroidPermissionService {
 
       throw MissingPluginException();
     });
+  }
+
+  Future<AndroidNativeRefreshResult<T>>
+  _refreshNativeStateWithAccessibilityRetry<T>({
+    required Future<T> Function() getOverlaySnapshot,
+  }) async {
+    var permissionSnapshot = AndroidPermissionSnapshot.unsupported;
+    late T overlaySnapshot;
+
+    for (final delay in _accessibilityReconnectRetrySchedule) {
+      if (delay > Duration.zero) {
+        await Future<void>.delayed(delay);
+      }
+
+      permissionSnapshot = await getSnapshot();
+      overlaySnapshot = await getOverlaySnapshot();
+      if (!_shouldRetryAccessibilityConnection(permissionSnapshot)) {
+        break;
+      }
+    }
+
+    return AndroidNativeRefreshResult(
+      permissionSnapshot: permissionSnapshot,
+      overlaySnapshot: overlaySnapshot,
+    );
+  }
+
+  bool _shouldRetryAccessibilityConnection(AndroidPermissionSnapshot snapshot) {
+    return snapshot.accessibilityGranted && !snapshot.accessibilityConnected;
   }
 }

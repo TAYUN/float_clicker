@@ -18,7 +18,7 @@ internal enum class AccessibilityGestureResult {
  */
 internal object AccessibilityGestureExecutor {
     val isServiceAvailable: Boolean
-        get() = FloatClickerAccessibilityService.instance != null
+        get() = AccessibilityServiceStateHelper.isAccessibilityServiceConnected()
 
     fun execute(
         action: AutomationAction,

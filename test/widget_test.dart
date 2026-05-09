@@ -174,9 +174,7 @@ void main() {
                   nativeMultiPointExecutedInRound,
               ...nativeMultiPointCurrentTargetId == null
                   ? const <String, Object?>{}
-                  : {
-                      'currentTargetId': nativeMultiPointCurrentTargetId,
-                    },
+                  : {'currentTargetId': nativeMultiPointCurrentTargetId},
               ...nativeMultiPointSettings,
             };
           }
@@ -247,7 +245,8 @@ void main() {
                 message: '请至少启用 1 个点位后再继续。',
               );
             }
-            if (!infiniteLoop && nativeMultiPointCompletedRounds >= repeatCount) {
+            if (!infiniteLoop &&
+                nativeMultiPointCompletedRounds >= repeatCount) {
               nativeMultiPointTaskRunState = 'idle';
               nativeMultiPointCurrentRound = 0;
               nativeMultiPointExecutedInRound = 0;
@@ -491,10 +490,7 @@ void main() {
     expect(find.text('继续任务'), findsOneWidget);
     expect(find.text('结束任务'), findsOneWidget);
 
-    nativeMultiPointSettings = {
-      ...nativeMultiPointSettings,
-      'repeatCount': 1,
-    };
+    nativeMultiPointSettings = {...nativeMultiPointSettings, 'repeatCount': 1};
     nativeMultiPointCompletedRounds = 1;
     nativeMultiPointCurrentRound = 2;
     nativeMultiPointExecutedInRound = 0;
@@ -914,6 +910,28 @@ void main() {
     expect(find.text('已开启'), findsOneWidget);
   });
 
+  testWidgets('Home refresh retries accessibility connection after resume', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+    await tester.pumpAndSettle();
+    nativeAccessibilityGranted = true;
+    nativeAccessibilityConnected = false;
+
+    Future<void>.delayed(const Duration(milliseconds: 300), () {
+      nativeAccessibilityConnected = true;
+    });
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 299));
+
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+
+    expect(find.text('已连接'), findsOneWidget);
+  });
+
   testWidgets('Single point page exits when overlay permission is revoked', (
     tester,
   ) async {
@@ -961,6 +979,60 @@ void main() {
     expect(find.text('无障碍服务已断开，点击任务已结束。'), findsOneWidget);
     expect(find.text('单点模式已开启'), findsOneWidget);
     expect(find.text('执行任务'), findsOneWidget);
+  });
+
+  testWidgets(
+    'Single point page keeps native running state while accessibility reconnects',
+    (tester) async {
+      nativeAccessibilityGranted = true;
+      nativeAccessibilityConnected = false;
+      nativeOverlayEnabled = true;
+      nativeTaskRunState = 'running';
+      nativeExecutedCount = 5;
+
+      Future<void>.delayed(const Duration(milliseconds: 300), () {
+        nativeAccessibilityConnected = true;
+      });
+
+      await tester.pumpWidget(const FloatClickerApp());
+      await tester.tap(find.text('单点模式'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(find.text('正在点击'), findsOneWidget);
+      expect(find.text('已执行 5 / 10 次'), findsOneWidget);
+      expect(find.text('执行任务'), findsNothing);
+    },
+  );
+
+  testWidgets('Multi point page refreshes native snapshot after resume', (
+    tester,
+  ) async {
+    nativeAccessibilityGranted = true;
+    nativeAccessibilityConnected = true;
+    nativeMultiPointOverlayEnabled = true;
+    nativeMultiPointTaskRunState = 'running';
+
+    await tester.pumpWidget(const FloatClickerApp());
+    await tapVisibleText(tester, '多点模式');
+    await tester.pumpAndSettle();
+
+    expect(find.text('正在点击'), findsOneWidget);
+
+    nativeMultiPointTaskRunState = 'paused';
+    nativeAccessibilityConnected = false;
+    Future<void>.delayed(const Duration(milliseconds: 300), () {
+      nativeAccessibilityConnected = true;
+    });
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('已暂停'), findsOneWidget);
+    expect(find.text('继续任务'), findsOneWidget);
   });
 
   testWidgets('Native overlay position changes are persisted', (tester) async {

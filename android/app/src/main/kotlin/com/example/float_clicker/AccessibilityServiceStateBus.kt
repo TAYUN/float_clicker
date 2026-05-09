@@ -5,7 +5,7 @@ object AccessibilityServiceStateBus {
 
     fun addListener(listener: (Boolean) -> Unit) {
         listeners.add(listener)
-        listener(FloatClickerAccessibilityService.instance != null)
+        listener(AccessibilityServiceStateHelper.isAccessibilityServiceConnected())
     }
 
     fun removeListener(listener: (Boolean) -> Unit) {

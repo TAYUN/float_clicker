@@ -18,7 +18,8 @@ class MultiPointPage extends StatefulWidget {
   State<MultiPointPage> createState() => _MultiPointPageState();
 }
 
-class _MultiPointPageState extends State<MultiPointPage> {
+class _MultiPointPageState extends State<MultiPointPage>
+    with WidgetsBindingObserver {
   final MultiPointSettingsStore _settingsStore =
       const MultiPointSettingsStore();
   final AndroidPermissionService _permissionService =
@@ -42,6 +43,7 @@ class _MultiPointPageState extends State<MultiPointPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _permissionService.setMultiPointOverlayStateChanged(
       _handleMultiPointOverlayStateChanged,
     );
@@ -55,30 +57,64 @@ class _MultiPointPageState extends State<MultiPointPage> {
   void dispose() {
     _permissionService.setMultiPointOverlayStateChanged(null);
     _permissionService.setMultiPointTargetPositionChanged(null);
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // 系统设置返回时，多点任务状态和服务连接态都可能已经变化，前台恢复时补一次短时收敛。
+      _refreshNativeState();
+    }
   }
 
   Future<void> _loadSavedConfiguration() async {
     final configuration = await _settingsStore.loadConfiguration();
     final appearanceSettings = await _appearanceStore.load();
-    final overlaySnapshot = await _permissionService
-        .getMultiPointOverlaySnapshot();
+    final refreshResult = await _permissionService
+        .refreshMultiPointStateWithAccessibilityRetry();
     if (!mounted) {
       return;
     }
 
     final snapshotConfiguration = _configurationFromSnapshot(
-      overlaySnapshot,
+      refreshResult.overlaySnapshot,
       fallback: configuration,
     );
     setState(() {
       _appearanceSettings = appearanceSettings;
       _configuration = snapshotConfiguration;
-      _isModeEnabled = overlaySnapshot.modeEnabled;
-      _taskRunState = overlaySnapshot.modeEnabled
-          ? overlaySnapshot.taskRunState
+      _isModeEnabled = refreshResult.overlaySnapshot.modeEnabled;
+      _taskRunState = refreshResult.overlaySnapshot.modeEnabled
+          ? refreshResult.overlaySnapshot.taskRunState
           : TaskRunState.idle;
       _isLoadingSettings = false;
+    });
+  }
+
+  Future<void> _refreshNativeState() async {
+    final refreshResult = await _permissionService
+        .refreshMultiPointStateWithAccessibilityRetry();
+    if (!mounted) {
+      return;
+    }
+
+    final snapshotConfiguration = _configurationFromSnapshot(
+      refreshResult.overlaySnapshot,
+      fallback: _configuration,
+    );
+    await _settingsStore.saveConfiguration(snapshotConfiguration);
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _configuration = snapshotConfiguration;
+      _isModeEnabled = refreshResult.overlaySnapshot.modeEnabled;
+      _taskRunState = refreshResult.overlaySnapshot.modeEnabled
+          ? refreshResult.overlaySnapshot.taskRunState
+          : TaskRunState.idle;
     });
   }
 

@@ -47,22 +47,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // 用户从系统设置页回到 App 后，权限状态可能已经改变。
+      // 用户从系统设置页回到 App 后，服务绑定可能晚于“已授权”状态，前台恢复时补一次短时收敛。
       _refreshPermissions();
     }
   }
 
   Future<void> _refreshPermissions() async {
-    final snapshot = await _permissionService.getSnapshot();
-    final singlePointSnapshot = await _permissionService
-        .getSinglePointOverlaySnapshot();
+    final refreshResult = await _permissionService
+        .refreshSinglePointStateWithAccessibilityRetry();
     if (!mounted) {
       return;
     }
 
     setState(() {
-      _permissionSnapshot = snapshot;
-      _singlePointSnapshot = singlePointSnapshot;
+      _permissionSnapshot = refreshResult.permissionSnapshot;
+      _singlePointSnapshot = refreshResult.overlaySnapshot;
       _isLoadingPermissions = false;
     });
   }
