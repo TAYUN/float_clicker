@@ -22,7 +22,9 @@ object SinglePointClickScheduler {
         onStatusChanged: (SinglePointTaskStatus) -> Unit,
     ): Boolean {
         // 无障碍服务未连接时不能 dispatchGesture，直接拒绝启动并让 Flutter 提示。
-        val service = FloatClickerAccessibilityService.instance ?: return false
+        if (!AccessibilityGestureExecutor.isServiceAvailable) {
+            return false
+        }
         end(notify = false)
         clickProvider = provider
         this.onStatusChanged = onStatusChanged
@@ -30,7 +32,7 @@ object SinglePointClickScheduler {
         isGestureInFlight = false
         taskGeneration += 1
         setTaskRunState(TaskRunState.RUNNING)
-        runNext(service, taskGeneration)
+        runNext(taskGeneration)
         return true
     }
 
@@ -49,10 +51,12 @@ object SinglePointClickScheduler {
             return false
         }
 
-        val service = FloatClickerAccessibilityService.instance ?: return false
+        if (!AccessibilityGestureExecutor.isServiceAvailable) {
+            return false
+        }
         setTaskRunState(TaskRunState.RUNNING)
         if (!isGestureInFlight) {
-            runNext(service, taskGeneration)
+            runNext(taskGeneration)
         }
         return true
     }
@@ -76,7 +80,7 @@ object SinglePointClickScheduler {
         }
     }
 
-    private fun runNext(service: FloatClickerAccessibilityService, generation: Int) {
+    private fun runNext(generation: Int) {
         if (generation != taskGeneration) {
             return
         }
@@ -93,35 +97,54 @@ object SinglePointClickScheduler {
         }
 
         isGestureInFlight = true
-        service.performTap(request.x, request.y, request.tapDurationMs.toLong()) {
+        val action = AutomationAction.Tap(
+            id = "single_point_tap_${generation}_$completedCount",
+            targetId = SinglePointClickRequest.TARGET_ID,
+            durationMs = request.tapDurationMs.toLong(),
+        )
+        val currentPosition = AutomationTargetPosition(request.x, request.y)
+        AccessibilityGestureExecutor.execute(
+            action = action,
+            targetPositionProvider = AutomationTargetPositionProvider { targetId ->
+                if (targetId == SinglePointClickRequest.TARGET_ID) currentPosition else null
+            },
+        ) { result ->
             if (generation != taskGeneration) {
-                return@performTap
+                return@execute
             }
 
             isGestureInFlight = false
 
             if (taskRunState == TaskRunState.IDLE) {
-                return@performTap
+                return@execute
+            }
+
+            if (result != AccessibilityGestureResult.COMPLETED) {
+                // 系统拒绝、取消手势或服务断开时，结束任务比继续排队更安全，也避免卡在 running。
+                end()
+                return@execute
             }
 
             completedCount += 1
             notifyStatusChanged()
 
             if (taskRunState == TaskRunState.PAUSED) {
-                return@performTap
+                return@execute
             }
 
             if (!request.infiniteLoop && completedCount >= request.repeatCount) {
                 end()
-                return@performTap
+                return@execute
             }
 
             // 间隔从“本次点击完成后”开始计算，避免手势持续时间和间隔互相重叠。
             handler.postDelayed(
                 {
-                    FloatClickerAccessibilityService.instance?.let {
-                        runNext(it, generation)
-                    } ?: end()
+                    if (AccessibilityGestureExecutor.isServiceAvailable) {
+                        runNext(generation)
+                    } else {
+                        end()
+                    }
                 },
                 request.intervalMs.toLong(),
             )
@@ -150,4 +173,8 @@ data class SinglePointClickRequest(
     val repeatCount: Int,
     val infiniteLoop: Boolean,
     val tapDurationMs: Int,
-)
+) {
+    companion object {
+        const val TARGET_ID = "single_point_target"
+    }
+}

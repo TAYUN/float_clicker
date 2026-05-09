@@ -1,8 +1,6 @@
 package com.example.float_clicker
 
-import android.accessibilityservice.GestureDescription
 import android.accessibilityservice.AccessibilityService
-import android.graphics.Path
 import android.view.accessibility.AccessibilityEvent
 
 class FloatClickerAccessibilityService : AccessibilityService() {
@@ -29,38 +27,6 @@ class FloatClickerAccessibilityService : AccessibilityService() {
         SinglePointClickScheduler.end()
         AccessibilityServiceStateBus.notifyConnected(false)
         super.onDestroy()
-    }
-
-    fun performTap(x: Float, y: Float, durationMs: Long, onComplete: () -> Unit) {
-        // 单点点击用一条没有移动距离的 Stroke 表示：从目标坐标按下，持续 durationMs 后抬起。
-        val path = Path().apply {
-            moveTo(x, y)
-        }
-        val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0, durationMs))
-            .build()
-
-        val accepted = dispatchGesture(
-            gesture,
-            object : GestureResultCallback() {
-                override fun onCompleted(gestureDescription: GestureDescription?) {
-                    super.onCompleted(gestureDescription)
-                    onComplete()
-                }
-
-                override fun onCancelled(gestureDescription: GestureDescription?) {
-                    super.onCancelled(gestureDescription)
-                    // 取消也通知调度器继续收尾，否则任务可能卡在“等待本次点击完成”。
-                    onComplete()
-                }
-            },
-            null,
-        )
-        if (!accepted) {
-            // dispatchGesture 可能在系统拒绝派发时直接返回 false，且不会再触发回调。
-            // 必须主动通知调度器，否则任务会一直卡在“本次手势进行中”。
-            onComplete()
-        }
     }
 
     companion object {
