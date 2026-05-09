@@ -5,6 +5,7 @@ import 'package:float_clicker/core/platform/android_permission_service.dart';
 import 'package:float_clicker/core/settings/global_overlay_appearance_settings.dart';
 import 'package:float_clicker/core/settings/global_overlay_appearance_store.dart';
 import 'package:float_clicker/features/clicker/clicker_settings.dart';
+import 'multi_point_profile_page.dart';
 import 'multi_point_settings.dart';
 import 'multi_point_settings_page.dart';
 import 'multi_point_settings_store.dart';
@@ -32,6 +33,7 @@ class _MultiPointPageState extends State<MultiPointPage>
     overlayUiSettings: MultiPointOverlayUiSettings.defaults,
     targets: MultiPointTargets.defaults(),
   );
+  late MultiPointProfileState _profileState;
   GlobalOverlayAppearanceSettings _appearanceSettings =
       GlobalOverlayAppearanceSettings.defaults;
   TaskRunState _taskRunState = TaskRunState.idle;
@@ -43,6 +45,12 @@ class _MultiPointPageState extends State<MultiPointPage>
   @override
   void initState() {
     super.initState();
+    _profileState = MultiPointProfileState(
+      profiles: [
+        MultiPointProfile.defaultProfile(configuration: _configuration),
+      ],
+      activeProfileId: MultiPointProfile.defaultProfileId,
+    );
     WidgetsBinding.instance.addObserver(this);
     _permissionService.setMultiPointOverlayStateChanged(
       _handleMultiPointOverlayStateChanged,
@@ -70,7 +78,8 @@ class _MultiPointPageState extends State<MultiPointPage>
   }
 
   Future<void> _loadSavedConfiguration() async {
-    final configuration = await _settingsStore.loadConfiguration();
+    final profileState = await _settingsStore.loadProfileState();
+    final configuration = profileState.activeProfile.configuration;
     final appearanceSettings = await _appearanceStore.load();
     final refreshResult = await _permissionService
         .refreshMultiPointStateWithAccessibilityRetry();
@@ -82,9 +91,14 @@ class _MultiPointPageState extends State<MultiPointPage>
       refreshResult.overlaySnapshot,
       fallback: configuration,
     );
+    final snapshotProfileState = _profileStateWithConfiguration(
+      profileState,
+      snapshotConfiguration,
+    );
     setState(() {
       _appearanceSettings = appearanceSettings;
       _configuration = snapshotConfiguration;
+      _profileState = snapshotProfileState;
       _isModeEnabled = refreshResult.overlaySnapshot.modeEnabled;
       _taskRunState = refreshResult.overlaySnapshot.modeEnabled
           ? refreshResult.overlaySnapshot.taskRunState
@@ -105,12 +119,17 @@ class _MultiPointPageState extends State<MultiPointPage>
       fallback: _configuration,
     );
     await _settingsStore.saveConfiguration(snapshotConfiguration);
+    final snapshotProfileState = _profileStateWithConfiguration(
+      _profileState,
+      snapshotConfiguration,
+    );
     if (!mounted) {
       return;
     }
 
     setState(() {
       _configuration = snapshotConfiguration;
+      _profileState = snapshotProfileState;
       _isModeEnabled = refreshResult.overlaySnapshot.modeEnabled;
       _taskRunState = refreshResult.overlaySnapshot.modeEnabled
           ? refreshResult.overlaySnapshot.taskRunState
@@ -126,7 +145,64 @@ class _MultiPointPageState extends State<MultiPointPage>
 
     setState(() {
       _configuration = configuration;
+      _profileState = _profileStateWithConfiguration(
+        _profileState,
+        configuration,
+      );
     });
+  }
+
+  Future<void> _openProfileManager() async {
+    if (!_canEditStructure) {
+      _showMessage('任务运行中不能管理配置，请先暂停或结束任务。');
+      return;
+    }
+
+    await _saveConfiguration(_configuration);
+    final latestProfileState = await _settingsStore.loadProfileState();
+    if (!mounted) {
+      return;
+    }
+
+    final result = await Navigator.of(context)
+        .push<MultiPointProfileManagementResult>(
+          MaterialPageRoute(
+            builder: (_) =>
+                MultiPointProfilePage(initialState: latestProfileState),
+          ),
+        );
+    if (result == null) {
+      return;
+    }
+
+    final nextProfileState = await _settingsStore.saveProfileState(
+      result.state,
+    );
+    final nextConfiguration = nextProfileState.activeProfile.configuration;
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _profileState = nextProfileState;
+      _configuration = nextConfiguration;
+    });
+
+    if (_isModeEnabled) {
+      try {
+        await _permissionService.updateMultiPointSettings(
+          nextConfiguration.settings,
+        );
+        await _permissionService.updateMultiPointOverlayUiSettings(
+          nextConfiguration.overlayUiSettings,
+        );
+        await _permissionService.updateMultiPointTargets(
+          nextConfiguration.targets,
+        );
+      } on PlatformException catch (error) {
+        _showPlatformError(error, fallback: '无法切换多点配置');
+      }
+    }
   }
 
   Future<void> _addTarget() async {
@@ -294,6 +370,10 @@ class _MultiPointPageState extends State<MultiPointPage>
       );
       setState(() {
         _configuration = nextConfiguration;
+        _profileState = _profileStateWithConfiguration(
+          _profileState,
+          nextConfiguration,
+        );
         _isModeEnabled = overlaySnapshot.modeEnabled;
         _taskRunState = overlaySnapshot.modeEnabled
             ? overlaySnapshot.taskRunState
@@ -336,6 +416,10 @@ class _MultiPointPageState extends State<MultiPointPage>
 
     setState(() {
       _configuration = nextConfiguration;
+      _profileState = _profileStateWithConfiguration(
+        _profileState,
+        nextConfiguration,
+      );
       _isModeEnabled = snapshot.modeEnabled;
       _taskRunState = snapshot.modeEnabled
           ? snapshot.taskRunState
@@ -377,6 +461,10 @@ class _MultiPointPageState extends State<MultiPointPage>
 
     setState(() {
       _configuration = nextConfiguration;
+      _profileState = _profileStateWithConfiguration(
+        _profileState,
+        nextConfiguration,
+      );
     });
   }
 
@@ -393,6 +481,21 @@ class _MultiPointPageState extends State<MultiPointPage>
       overlayUiSettings:
           snapshot.overlayUiSettings ?? fallback.overlayUiSettings,
       targets: snapshot.targets,
+    );
+  }
+
+  MultiPointProfileState _profileStateWithConfiguration(
+    MultiPointProfileState state,
+    MultiPointConfiguration configuration,
+  ) {
+    return MultiPointProfileState(
+      profiles: [
+        for (final profile in state.profiles)
+          profile.id == state.activeProfileId
+              ? profile.withConfiguration(configuration)
+              : profile,
+      ],
+      activeProfileId: state.activeProfileId,
     );
   }
 
@@ -439,11 +542,14 @@ class _MultiPointPageState extends State<MultiPointPage>
                 padding: const EdgeInsets.all(16),
                 children: [
                   _StatusPanel(
+                    profileName: _profileState.activeProfile.name,
                     isModeEnabled: _isModeEnabled,
                     taskRunState: _taskRunState,
                     totalCount: targets.length,
                     enabledCount: enabledCount,
                     settings: settings,
+                    onManageProfiles: _openProfileManager,
+                    canManageProfiles: _canEditStructure,
                   ),
                   const SizedBox(height: 16),
                   Card(
@@ -548,18 +654,24 @@ class _TaskControls extends StatelessWidget {
 
 class _StatusPanel extends StatelessWidget {
   const _StatusPanel({
+    required this.profileName,
     required this.isModeEnabled,
     required this.taskRunState,
     required this.totalCount,
     required this.enabledCount,
     required this.settings,
+    required this.onManageProfiles,
+    required this.canManageProfiles,
   });
 
+  final String profileName;
   final bool isModeEnabled;
   final TaskRunState taskRunState;
   final int totalCount;
   final int enabledCount;
   final MultiPointSettings settings;
+  final VoidCallback onManageProfiles;
+  final bool canManageProfiles;
 
   @override
   Widget build(BuildContext context) {
@@ -577,27 +689,45 @@ class _StatusPanel extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Column(
           children: [
-            Icon(
-              isModeEnabled
-                  ? Icons.control_point_duplicate
-                  : Icons.pause_circle_outline,
-              color: isModeEnabled ? colorScheme.primary : colorScheme.outline,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  Text(
-                    '点位 $totalCount 个，启用 $enabledCount 个，$repeatLabel',
-                    style: Theme.of(context).textTheme.bodySmall,
+            Row(
+              children: [
+                Icon(
+                  isModeEnabled
+                      ? Icons.control_point_duplicate
+                      : Icons.pause_circle_outline,
+                  color: isModeEnabled
+                      ? colorScheme.primary
+                      : colorScheme.outline,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '点位 $totalCount 个，启用 $enabledCount 个，$repeatLabel',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.folder_copy_outlined),
+              title: Text(profileName),
+              subtitle: const Text('当前多点配置'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: canManageProfiles ? onManageProfiles : onManageProfiles,
             ),
           ],
         ),

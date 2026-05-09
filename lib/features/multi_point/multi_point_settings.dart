@@ -327,6 +327,32 @@ class MultiPointSettings {
     );
   }
 
+  Map<String, Object?> toJson() {
+    return {
+      'intervalMs': intervalMs,
+      'repeatCount': repeatCount,
+      'infiniteLoop': infiniteLoop,
+      'tapDurationMs': tapDurationMs,
+    };
+  }
+
+  factory MultiPointSettings.fromJson(Object? value) {
+    if (value is! Map) {
+      return defaults;
+    }
+
+    return MultiPointSettings(
+      intervalMs: _readPositiveInt(value['intervalMs']) ?? defaults.intervalMs,
+      repeatCount:
+          _readPositiveInt(value['repeatCount']) ?? defaults.repeatCount,
+      infiniteLoop: value['infiniteLoop'] is bool
+          ? value['infiniteLoop'] as bool
+          : defaults.infiniteLoop,
+      tapDurationMs:
+          _readPositiveInt(value['tapDurationMs']) ?? defaults.tapDurationMs,
+    );
+  }
+
   @override
   bool operator ==(Object other) {
     return other is MultiPointSettings &&
@@ -403,6 +429,50 @@ class MultiPointOverlayUiSettings {
     );
   }
 
+  Map<String, Object?> toJson() {
+    return {
+      'interactionMode': interactionMode.name,
+      'toolbarPositionX': toolbarPositionX,
+      'toolbarPositionY': toolbarPositionY,
+      'collapsedToolbarPositionX': collapsedToolbarPositionX,
+      'collapsedToolbarPositionY': collapsedToolbarPositionY,
+      'actionButtonPositionX': actionButtonPositionX,
+      'actionButtonPositionY': actionButtonPositionY,
+      'isToolbarCollapsed': isToolbarCollapsed,
+    };
+  }
+
+  factory MultiPointOverlayUiSettings.fromJson(Object? value) {
+    if (value is! Map) {
+      return defaults;
+    }
+
+    return MultiPointOverlayUiSettings(
+      interactionMode: OverlayInteractionMode.fromName(
+        value['interactionMode'] as String?,
+      ),
+      toolbarPositionX:
+          _readInt(value['toolbarPositionX']) ?? defaults.toolbarPositionX,
+      toolbarPositionY:
+          _readInt(value['toolbarPositionY']) ?? defaults.toolbarPositionY,
+      collapsedToolbarPositionX:
+          _readInt(value['collapsedToolbarPositionX']) ??
+          defaults.collapsedToolbarPositionX,
+      collapsedToolbarPositionY:
+          _readInt(value['collapsedToolbarPositionY']) ??
+          defaults.collapsedToolbarPositionY,
+      actionButtonPositionX:
+          _readInt(value['actionButtonPositionX']) ??
+          defaults.actionButtonPositionX,
+      actionButtonPositionY:
+          _readInt(value['actionButtonPositionY']) ??
+          defaults.actionButtonPositionY,
+      isToolbarCollapsed: value['isToolbarCollapsed'] is bool
+          ? value['isToolbarCollapsed'] as bool
+          : defaults.isToolbarCollapsed,
+    );
+  }
+
   @override
   bool operator ==(Object other) {
     return other is MultiPointOverlayUiSettings &&
@@ -442,6 +512,209 @@ class MultiPointConfiguration {
   final MultiPointSettings settings;
   final MultiPointOverlayUiSettings overlayUiSettings;
   final MultiPointTargets targets;
+
+  MultiPointConfiguration copyWith({
+    MultiPointSettings? settings,
+    MultiPointOverlayUiSettings? overlayUiSettings,
+    MultiPointTargets? targets,
+  }) {
+    return MultiPointConfiguration(
+      settings: settings ?? this.settings,
+      overlayUiSettings: overlayUiSettings ?? this.overlayUiSettings,
+      targets: targets ?? this.targets,
+    );
+  }
+}
+
+/// P6 多配置管理的单个配置。
+///
+/// 第一版 profile 只承载 App 内配置库，不包含 P7 的执行控件位置或加载状态。
+class MultiPointProfile {
+  const MultiPointProfile({
+    required this.id,
+    required this.name,
+    required this.settings,
+    required this.overlayUiSettings,
+    required this.targets,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  static const defaultProfileId = 'default';
+  static const defaultProfileName = '默认配置';
+
+  final String id;
+  final String name;
+  final MultiPointSettings settings;
+  final MultiPointOverlayUiSettings overlayUiSettings;
+  final MultiPointTargets targets;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  MultiPointConfiguration get configuration {
+    return MultiPointConfiguration(
+      settings: settings,
+      overlayUiSettings: overlayUiSettings,
+      targets: targets,
+    );
+  }
+
+  factory MultiPointProfile.defaultProfile({
+    MultiPointConfiguration? configuration,
+    DateTime? now,
+  }) {
+    final timestamp = now ?? DateTime.now();
+    final resolvedConfiguration =
+        configuration ??
+        MultiPointConfiguration(
+          settings: MultiPointSettings.defaults,
+          overlayUiSettings: MultiPointOverlayUiSettings.defaults,
+          targets: MultiPointTargets.defaults(),
+        );
+    return MultiPointProfile(
+      id: defaultProfileId,
+      name: defaultProfileName,
+      settings: resolvedConfiguration.settings,
+      overlayUiSettings: resolvedConfiguration.overlayUiSettings,
+      targets: resolvedConfiguration.targets,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    );
+  }
+
+  MultiPointProfile copyWith({
+    String? id,
+    String? name,
+    MultiPointSettings? settings,
+    MultiPointOverlayUiSettings? overlayUiSettings,
+    MultiPointTargets? targets,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return MultiPointProfile(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      settings: settings ?? this.settings,
+      overlayUiSettings: overlayUiSettings ?? this.overlayUiSettings,
+      targets: targets ?? this.targets,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  MultiPointProfile withConfiguration(
+    MultiPointConfiguration configuration, {
+    DateTime? updatedAt,
+  }) {
+    return copyWith(
+      settings: configuration.settings,
+      overlayUiSettings: configuration.overlayUiSettings,
+      targets: configuration.targets,
+      updatedAt: updatedAt ?? DateTime.now(),
+    );
+  }
+
+  Map<String, Object?> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'settings': settings.toJson(),
+      'overlayUiSettings': overlayUiSettings.toJson(),
+      'targets': targets.toJsonList(),
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  static MultiPointProfile? tryFromJson(Object? value) {
+    if (value is! Map) {
+      return null;
+    }
+
+    final id = (value['id'] as String?)?.trim();
+    if (id == null || id.isEmpty) {
+      return null;
+    }
+
+    final now = DateTime.now();
+    final name = (value['name'] as String?)?.trim();
+    return MultiPointProfile(
+      id: id,
+      name: (name == null || name.isEmpty) ? '未命名配置' : name,
+      settings: MultiPointSettings.fromJson(value['settings']),
+      overlayUiSettings: MultiPointOverlayUiSettings.fromJson(
+        value['overlayUiSettings'],
+      ),
+      targets: MultiPointTargets.fromJsonList(value['targets']),
+      createdAt: _readDateTime(value['createdAt']) ?? now,
+      updatedAt: _readDateTime(value['updatedAt']) ?? now,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is MultiPointProfile &&
+        other.id == id &&
+        other.name == name &&
+        other.settings == settings &&
+        other.overlayUiSettings == overlayUiSettings &&
+        other.targets == targets &&
+        other.createdAt == createdAt &&
+        other.updatedAt == updatedAt;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(
+      id,
+      name,
+      settings,
+      overlayUiSettings,
+      targets,
+      createdAt,
+      updatedAt,
+    );
+  }
+}
+
+/// 多点配置库快照，集中保证 active profile 一定指向有效配置。
+class MultiPointProfileState {
+  MultiPointProfileState({
+    required Iterable<MultiPointProfile> profiles,
+    required String activeProfileId,
+  }) : profiles = List.unmodifiable(profiles),
+       activeProfileId = _normalizeActiveProfileId(profiles, activeProfileId);
+
+  final List<MultiPointProfile> profiles;
+  final String activeProfileId;
+
+  MultiPointProfile get activeProfile {
+    return profiles.firstWhere((profile) => profile.id == activeProfileId);
+  }
+
+  MultiPointProfileState copyWith({
+    Iterable<MultiPointProfile>? profiles,
+    String? activeProfileId,
+  }) {
+    return MultiPointProfileState(
+      profiles: profiles ?? this.profiles,
+      activeProfileId: activeProfileId ?? this.activeProfileId,
+    );
+  }
+
+  static String _normalizeActiveProfileId(
+    Iterable<MultiPointProfile> profiles,
+    String activeProfileId,
+  ) {
+    final profileList = profiles.toList();
+    if (profileList.isEmpty) {
+      throw StateError('Multi point profile state must keep one profile.');
+    }
+    final hasActiveProfile = profileList.any(
+      (profile) => profile.id == activeProfileId,
+    );
+    return hasActiveProfile ? activeProfileId : profileList.first.id;
+  }
 }
 
 int? _readInt(Object? value) {
@@ -453,6 +726,11 @@ int? _readInt(Object? value) {
   };
 }
 
+int? _readPositiveInt(Object? value) {
+  final parsed = _readInt(value);
+  return parsed == null || parsed <= 0 ? null : parsed;
+}
+
 double? _readDouble(Object? value) {
   // SharedPreferences/JSON 历史数据可能出现 int、double 或字符串，这里统一宽松读取。
   return switch (value) {
@@ -461,4 +739,11 @@ double? _readDouble(Object? value) {
     String() => double.tryParse(value),
     _ => null,
   };
+}
+
+DateTime? _readDateTime(Object? value) {
+  if (value is! String) {
+    return null;
+  }
+  return DateTime.tryParse(value);
 }

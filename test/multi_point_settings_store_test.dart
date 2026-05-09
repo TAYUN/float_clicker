@@ -29,6 +29,59 @@ void main() {
     expect(configuration.targets.hasEnabledTarget, isTrue);
   });
 
+  test('loads default profile state when profiles are absent', () async {
+    final state = await store.loadProfileState();
+
+    expect(state.profiles, hasLength(1));
+    expect(state.activeProfile.name, '默认配置');
+    expect(
+      state.activeProfile.configuration.settings,
+      MultiPointSettings.defaults,
+    );
+
+    final preferences = await SharedPreferences.getInstance();
+    expect(
+      preferences.getString(MultiPointSettingsStore.profilesJsonKey),
+      isNotNull,
+    );
+    expect(
+      preferences.getString(MultiPointSettingsStore.activeProfileIdKey),
+      state.activeProfileId,
+    );
+  });
+
+  test('migrates legacy single configuration into default profile', () async {
+    SharedPreferences.setMockInitialValues({
+      MultiPointSettingsStore.intervalMsKey: 880,
+      MultiPointSettingsStore.repeatCountKey: 6,
+      MultiPointSettingsStore.infiniteLoopKey: true,
+      MultiPointSettingsStore.tapDurationMsKey: 70,
+      MultiPointSettingsStore.overlayInteractionModeKey: 'minimal',
+      MultiPointSettingsStore.targetsJsonKey: jsonEncode([
+        {
+          'id': 'old',
+          'order': 1,
+          'label': '旧',
+          'x': 123.0,
+          'y': 456.0,
+          'enabled': true,
+        },
+      ]),
+    });
+
+    final state = await store.loadProfileState();
+
+    expect(state.profiles, hasLength(1));
+    expect(state.activeProfile.name, '默认配置');
+    expect(state.activeProfile.settings.intervalMs, 880);
+    expect(state.activeProfile.settings.infiniteLoop, isTrue);
+    expect(
+      state.activeProfile.overlayUiSettings.interactionMode,
+      OverlayInteractionMode.minimal,
+    );
+    expect(state.activeProfile.targets.values.single.id, 'old');
+  });
+
   test('adds targets until max limit and rejects overflow', () {
     var targets = MultiPointTargets.defaults();
 
@@ -137,5 +190,77 @@ void main() {
 
     expect(savedTargets.length, 3);
     expect((savedTargets[1] as Map<String, Object?>)['enabled'], isFalse);
+  });
+
+  test('persists multiple profiles and switches active profile', () async {
+    final first = MultiPointProfile.defaultProfile().copyWith(
+      id: 'first',
+      name: '配置 A',
+      settings: MultiPointSettings.defaults.copyWith(intervalMs: 600),
+    );
+    final second = MultiPointProfile.defaultProfile().copyWith(
+      id: 'second',
+      name: '配置 B',
+      settings: MultiPointSettings.defaults.copyWith(intervalMs: 900),
+    );
+
+    await store.saveProfileState(
+      MultiPointProfileState(
+        profiles: [first, second],
+        activeProfileId: second.id,
+      ),
+    );
+
+    final state = await store.loadProfileState();
+    final configuration = await store.loadConfiguration();
+
+    expect(state.profiles.map((profile) => profile.name), ['配置 A', '配置 B']);
+    expect(state.activeProfileId, 'second');
+    expect(configuration.settings.intervalMs, 900);
+  });
+
+  test('profile management keeps one profile and syncs legacy keys', () async {
+    var state = await store.createProfile(name: '操作');
+    expect(state.profiles, hasLength(2));
+    expect(state.activeProfile.name, '操作');
+
+    state = await store.copyProfile(state.activeProfileId);
+    expect(state.profiles, hasLength(3));
+    expect(state.activeProfile.name, '操作 副本');
+
+    state = await store.renameProfile(state.activeProfileId, '操作副本改名');
+    expect(state.activeProfile.name, '操作副本改名');
+
+    final copiedProfileId = state.activeProfileId;
+    state = await store.deleteProfile(copiedProfileId);
+    expect(state.profiles, hasLength(2));
+    expect(state.activeProfileId, isNot(copiedProfileId));
+
+    state = await store.deleteProfile(state.profiles.last.id);
+    state = await store.deleteProfile(state.profiles.single.id);
+    expect(state.profiles, hasLength(1));
+
+    await store.saveConfiguration(
+      state.activeProfile.configuration.copyWith(
+        settings: MultiPointSettings.defaults.copyWith(intervalMs: 730),
+      ),
+    );
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getInt(MultiPointSettingsStore.intervalMsKey), 730);
+  });
+
+  test('bad profiles json falls back to default profile', () async {
+    SharedPreferences.setMockInitialValues({
+      MultiPointSettingsStore.profilesJsonKey: '{bad-json',
+    });
+
+    final state = await store.loadProfileState();
+
+    expect(state.profiles, hasLength(1));
+    expect(state.activeProfile.name, '默认配置');
+    expect(state.activeProfile.targets.values, [
+      MultiPointTarget.defaultFirstTarget,
+      MultiPointTarget.defaultSecondTarget,
+    ]);
   });
 }

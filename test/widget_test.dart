@@ -399,6 +399,58 @@ void main() {
     expect(find.text('点位 2'), findsOneWidget);
     expect(find.text('开启多点悬浮层'), findsOneWidget);
     expect(find.text('间隔 500 ms，循环 10 轮，普通模式'), findsOneWidget);
+    expect(find.text('默认配置'), findsOneWidget);
+  });
+
+  testWidgets('Multi point profile manager creates and selects profile', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+    await tester.tap(find.text('默认配置'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('多点配置'), findsOneWidget);
+    await tester.tap(find.text('新建配置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('完成'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('新配置'), findsOneWidget);
+
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(EditableText).at(0), '720');
+    await tapVisibleText(tester, '保存');
+
+    expect(find.text('间隔 720 ms，循环 10 轮，普通模式'), findsOneWidget);
+  });
+
+  testWidgets('Multi point profile manager renames profile from menu', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+    await tester.tap(find.text('默认配置'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('配置操作').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重命名'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(EditableText), '刷副本');
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('刷副本'), findsOneWidget);
+
+    await tester.tap(find.text('完成'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('刷副本'), findsOneWidget);
   });
 
   testWidgets('Multi point target edits persist after leaving page', (
@@ -460,7 +512,7 @@ void main() {
     await tester.tap(find.byType(Switch).at(1));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('开启多点悬浮层'));
+    await tapVisibleText(tester, '开启多点悬浮层');
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
@@ -475,9 +527,9 @@ void main() {
     await tester.pumpWidget(const FloatClickerApp());
 
     await tapVisibleText(tester, '多点模式');
-    await tester.tap(find.text('开启多点悬浮层'));
+    await tapVisibleText(tester, '开启多点悬浮层');
     await tester.pumpAndSettle();
-    await tester.tap(find.text('执行任务'));
+    await tapVisibleText(tester, '执行任务');
     await tester.pumpAndSettle();
 
     expect(find.text('正在点击'), findsOneWidget);
@@ -495,11 +547,29 @@ void main() {
     nativeMultiPointCurrentRound = 2;
     nativeMultiPointExecutedInRound = 0;
 
-    await tester.tap(find.text('继续任务'));
+    await tapVisibleText(tester, '继续任务');
     await tester.pumpAndSettle();
 
     expect(find.text('多点编辑中'), findsOneWidget);
     expect(find.text('执行任务'), findsOneWidget);
+  });
+
+  testWidgets('Multi point profile manager is blocked while running', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+    await tapVisibleText(tester, '开启多点悬浮层');
+    await tester.pumpAndSettle();
+    await tapVisibleText(tester, '执行任务');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('默认配置'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('任务运行中不能管理配置，请先暂停或结束任务。'), findsOneWidget);
+    expect(find.text('多点配置'), findsNothing);
   });
 
   testWidgets('Multi point target position callback is persisted', (
@@ -508,7 +578,7 @@ void main() {
     await tester.pumpWidget(const FloatClickerApp());
 
     await tapVisibleText(tester, '多点模式');
-    await tester.tap(find.text('开启多点悬浮层'));
+    await tapVisibleText(tester, '开启多点悬浮层');
     await tester.pumpAndSettle();
 
     await sendMultiPointTargetPosition(id: 'p2', x: 345, y: 456);
@@ -1032,6 +1102,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('已暂停'), findsOneWidget);
+    await scrollDown(tester);
     expect(find.text('继续任务'), findsOneWidget);
   });
 
