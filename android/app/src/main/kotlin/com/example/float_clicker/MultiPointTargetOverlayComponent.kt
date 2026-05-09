@@ -84,6 +84,18 @@ internal class MultiPointTargetOverlayComponent(
         updateLayoutSize(metrics.targetSizePx, metrics.targetSizePx)
     }
 
+    fun setTouchable(isTouchable: Boolean) {
+        val targetView = view ?: return
+        val targetParams = params ?: return
+        // 多点执行时点击坐标正好落在悬浮点中心；运行中必须透传触摸，避免点到自己的 Overlay。
+        targetParams.flags = if (isTouchable) {
+            targetParams.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        } else {
+            targetParams.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        }
+        overlayWindow.updateViewLayout(targetView, targetParams)
+    }
+
     fun remove() {
         overlayWindow.removeView(view)
         view = null
