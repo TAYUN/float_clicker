@@ -38,6 +38,7 @@ void main() {
       state.activeProfile.configuration.settings,
       MultiPointSettings.defaults,
     );
+    expect(state.loadedProfileIds, [state.activeProfileId]);
 
     final preferences = await SharedPreferences.getInstance();
     expect(
@@ -47,6 +48,10 @@ void main() {
     expect(
       preferences.getString(MultiPointSettingsStore.activeProfileIdKey),
       state.activeProfileId,
+    );
+    expect(
+      preferences.getString(MultiPointSettingsStore.loadedProfileIdsJsonKey),
+      isNotNull,
     );
   });
 
@@ -208,6 +213,18 @@ void main() {
       MultiPointProfileState(
         profiles: [first, second],
         activeProfileId: second.id,
+        loadedProfiles: const [
+          LoadedMultiPointProfile(
+            profileId: 'first',
+            order: 1,
+            isVisible: true,
+          ),
+          LoadedMultiPointProfile(
+            profileId: 'second',
+            order: 2,
+            isVisible: true,
+          ),
+        ],
       ),
     );
 
@@ -216,7 +233,60 @@ void main() {
 
     expect(state.profiles.map((profile) => profile.name), ['配置 A', '配置 B']);
     expect(state.activeProfileId, 'second');
+    expect(state.loadedProfileIds, ['first', 'second']);
     expect(configuration.settings.intervalMs, 900);
+  });
+
+  test('loaded profiles are normalized and kept after profile edits', () async {
+    final first = MultiPointProfile.defaultProfile().copyWith(id: 'first');
+    final second = MultiPointProfile.defaultProfile().copyWith(id: 'second');
+    final third = MultiPointProfile.defaultProfile().copyWith(id: 'third');
+
+    var state = await store.saveProfileState(
+      MultiPointProfileState(
+        profiles: [first, second, third],
+        activeProfileId: second.id,
+        loadedProfiles: const [
+          LoadedMultiPointProfile(
+            profileId: 'missing',
+            order: 1,
+            isVisible: true,
+          ),
+          LoadedMultiPointProfile(
+            profileId: 'third',
+            order: 2,
+            isVisible: false,
+          ),
+          LoadedMultiPointProfile(
+            profileId: 'second',
+            order: 3,
+            isVisible: true,
+          ),
+          LoadedMultiPointProfile(
+            profileId: 'first',
+            order: 4,
+            isVisible: true,
+          ),
+        ],
+      ),
+    );
+
+    expect(state.loadedProfileIds, ['second', 'first']);
+
+    state = await store.deleteProfile('second');
+
+    expect(state.profiles.map((profile) => profile.id), ['first', 'third']);
+    expect(state.loadedProfileIds, ['first']);
+  });
+
+  test('bad loaded profiles json falls back to active profile', () async {
+    SharedPreferences.setMockInitialValues({
+      MultiPointSettingsStore.loadedProfileIdsJsonKey: '{bad-json',
+    });
+
+    final state = await store.loadProfileState();
+
+    expect(state.loadedProfileIds, [state.activeProfileId]);
   });
 
   test('profile management keeps one profile and syncs legacy keys', () async {

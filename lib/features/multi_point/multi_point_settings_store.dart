@@ -13,6 +13,7 @@ class MultiPointSettingsStore {
 
   static const profilesJsonKey = 'multi_point.profiles_json';
   static const activeProfileIdKey = 'multi_point.active_profile_id';
+  static const loadedProfileIdsJsonKey = 'multi_point.loaded_profile_ids_json';
   static const intervalMsKey = 'multi_point.interval_ms';
   static const repeatCountKey = 'multi_point.repeat_count';
   static const infiniteLoopKey = 'multi_point.infinite_loop';
@@ -69,6 +70,7 @@ class MultiPointSettingsStore {
       MultiPointProfileState(
         profiles: nextProfiles,
         activeProfileId: state.activeProfileId,
+        loadedProfiles: state.loadedProfiles,
       ),
     );
   }
@@ -114,6 +116,7 @@ class MultiPointSettingsStore {
     final nextState = MultiPointProfileState(
       profiles: [...state.profiles, profile],
       activeProfileId: profile.id,
+      loadedProfiles: state.loadedProfiles,
     );
     await _saveProfileState(preferences, nextState);
     return nextState;
@@ -136,6 +139,7 @@ class MultiPointSettingsStore {
     final nextState = MultiPointProfileState(
       profiles: [...state.profiles, copy],
       activeProfileId: copy.id,
+      loadedProfiles: state.loadedProfiles,
     );
     await _saveProfileState(preferences, nextState);
     return nextState;
@@ -161,6 +165,7 @@ class MultiPointSettingsStore {
     final nextState = MultiPointProfileState(
       profiles: nextProfiles,
       activeProfileId: state.activeProfileId,
+      loadedProfiles: state.loadedProfiles,
     );
     await _saveProfileState(preferences, nextState);
     return nextState;
@@ -183,6 +188,7 @@ class MultiPointSettingsStore {
     final nextState = MultiPointProfileState(
       profiles: nextProfiles,
       activeProfileId: nextActiveProfileId,
+      loadedProfiles: state.loadedProfiles,
     );
     await _saveProfileState(preferences, nextState);
     return nextState;
@@ -194,6 +200,7 @@ class MultiPointSettingsStore {
     final nextState = MultiPointProfileState(
       profiles: state.profiles,
       activeProfileId: profileId,
+      loadedProfiles: state.loadedProfiles,
     );
     await _saveProfileState(preferences, nextState);
     return nextState;
@@ -205,6 +212,7 @@ class MultiPointSettingsStore {
       return MultiPointProfileState(
         profiles: profiles,
         activeProfileId: preferences.getString(activeProfileIdKey) ?? '',
+        loadedProfiles: _loadLoadedProfiles(preferences),
       );
     }
 
@@ -215,6 +223,13 @@ class MultiPointSettingsStore {
     return MultiPointProfileState(
       profiles: [defaultProfile],
       activeProfileId: defaultProfile.id,
+      loadedProfiles: [
+        const LoadedMultiPointProfile(
+          profileId: MultiPointProfile.defaultProfileId,
+          order: 1,
+          isVisible: true,
+        ),
+      ],
     );
   }
 
@@ -256,6 +271,7 @@ class MultiPointSettingsStore {
     final normalizedState = MultiPointProfileState(
       profiles: profiles,
       activeProfileId: state.activeProfileId,
+      loadedProfiles: state.loadedProfiles,
     );
     final activeConfiguration = normalizedState.activeProfile.configuration;
 
@@ -270,8 +286,45 @@ class MultiPointSettingsStore {
         activeProfileIdKey,
         normalizedState.activeProfileId,
       ),
+      preferences.setString(
+        loadedProfileIdsJsonKey,
+        jsonEncode([
+          for (final loadedProfile in normalizedState.loadedProfiles)
+            loadedProfile.toJson(),
+        ]),
+      ),
       _saveLegacyConfiguration(preferences, activeConfiguration),
     ]);
+  }
+
+  List<LoadedMultiPointProfile> _loadLoadedProfiles(
+    SharedPreferences preferences,
+  ) {
+    final loadedProfilesJson = preferences.getString(loadedProfileIdsJsonKey);
+    if (loadedProfilesJson == null) {
+      return const [];
+    }
+
+    try {
+      final decoded = jsonDecode(loadedProfilesJson);
+      if (decoded is! List) {
+        return const [];
+      }
+
+      final loadedProfiles = <LoadedMultiPointProfile>[];
+      for (var index = 0; index < decoded.length; index += 1) {
+        final loadedProfile = LoadedMultiPointProfile.tryFromJson(
+          decoded[index],
+          fallbackOrder: index + 1,
+        );
+        if (loadedProfile != null) {
+          loadedProfiles.add(loadedProfile);
+        }
+      }
+      return loadedProfiles..sort((a, b) => a.order.compareTo(b.order));
+    } on FormatException {
+      return const [];
+    }
   }
 
   Future<void> _saveLegacyConfiguration(

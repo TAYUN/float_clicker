@@ -682,23 +682,43 @@ class MultiPointProfileState {
   MultiPointProfileState({
     required Iterable<MultiPointProfile> profiles,
     required String activeProfileId,
+    Iterable<LoadedMultiPointProfile>? loadedProfiles,
   }) : profiles = List.unmodifiable(profiles),
-       activeProfileId = _normalizeActiveProfileId(profiles, activeProfileId);
+       activeProfileId = _normalizeActiveProfileId(profiles, activeProfileId),
+       loadedProfiles = List.unmodifiable(
+         _normalizeLoadedProfiles(profiles, activeProfileId, loadedProfiles),
+       );
 
   final List<MultiPointProfile> profiles;
   final String activeProfileId;
+  final List<LoadedMultiPointProfile> loadedProfiles;
 
   MultiPointProfile get activeProfile {
     return profiles.firstWhere((profile) => profile.id == activeProfileId);
   }
 
+  List<String> get loadedProfileIds {
+    return [
+      for (final loadedProfile in loadedProfiles)
+        if (loadedProfile.isVisible) loadedProfile.profileId,
+    ];
+  }
+
+  bool isProfileLoaded(String profileId) {
+    return loadedProfileIds.contains(profileId);
+  }
+
+  bool get canUnloadProfile => loadedProfileIds.length > 1;
+
   MultiPointProfileState copyWith({
     Iterable<MultiPointProfile>? profiles,
     String? activeProfileId,
+    Iterable<LoadedMultiPointProfile>? loadedProfiles,
   }) {
     return MultiPointProfileState(
       profiles: profiles ?? this.profiles,
       activeProfileId: activeProfileId ?? this.activeProfileId,
+      loadedProfiles: loadedProfiles ?? this.loadedProfiles,
     );
   }
 
@@ -714,6 +734,122 @@ class MultiPointProfileState {
       (profile) => profile.id == activeProfileId,
     );
     return hasActiveProfile ? activeProfileId : profileList.first.id;
+  }
+
+  static List<LoadedMultiPointProfile> _normalizeLoadedProfiles(
+    Iterable<MultiPointProfile> profiles,
+    String activeProfileId,
+    Iterable<LoadedMultiPointProfile>? loadedProfiles,
+  ) {
+    final profileList = profiles.toList();
+    final profileIds = profileList.map((profile) => profile.id).toSet();
+    final normalizedActiveProfileId = _normalizeActiveProfileId(
+      profileList,
+      activeProfileId,
+    );
+    final result = <LoadedMultiPointProfile>[];
+    final seenIds = <String>{};
+
+    for (final loadedProfile
+        in loadedProfiles ?? const <LoadedMultiPointProfile>[]) {
+      if (!profileIds.contains(loadedProfile.profileId) ||
+          seenIds.contains(loadedProfile.profileId) ||
+          !loadedProfile.isVisible) {
+        continue;
+      }
+      seenIds.add(loadedProfile.profileId);
+      result.add(
+        loadedProfile.copyWith(order: result.length + 1, isVisible: true),
+      );
+    }
+
+    if (result.isEmpty) {
+      result.add(
+        LoadedMultiPointProfile(
+          profileId: normalizedActiveProfileId,
+          order: 1,
+          isVisible: true,
+        ),
+      );
+    }
+
+    return result;
+  }
+}
+
+/// P7.1 的已加载配置状态。
+///
+/// 这里只保存“哪些 profile 未来会进入悬浮执行区”，不包含 P7.2 的悬浮按钮坐标和执行状态。
+class LoadedMultiPointProfile {
+  const LoadedMultiPointProfile({
+    required this.profileId,
+    required this.order,
+    required this.isVisible,
+  });
+
+  final String profileId;
+  final int order;
+  final bool isVisible;
+
+  LoadedMultiPointProfile copyWith({
+    String? profileId,
+    int? order,
+    bool? isVisible,
+  }) {
+    return LoadedMultiPointProfile(
+      profileId: profileId ?? this.profileId,
+      order: order ?? this.order,
+      isVisible: isVisible ?? this.isVisible,
+    );
+  }
+
+  Map<String, Object?> toJson() {
+    return {'profileId': profileId, 'order': order, 'isVisible': isVisible};
+  }
+
+  static LoadedMultiPointProfile? tryFromJson(
+    Object? value, {
+    int? fallbackOrder,
+  }) {
+    if (value is String) {
+      final id = value.trim();
+      if (id.isEmpty) {
+        return null;
+      }
+      return LoadedMultiPointProfile(
+        profileId: id,
+        order: fallbackOrder ?? 1,
+        isVisible: true,
+      );
+    }
+
+    if (value is! Map) {
+      return null;
+    }
+
+    final id = (value['profileId'] as String?)?.trim();
+    if (id == null || id.isEmpty) {
+      return null;
+    }
+
+    return LoadedMultiPointProfile(
+      profileId: id,
+      order: _readInt(value['order']) ?? fallbackOrder ?? 1,
+      isVisible: value['isVisible'] is bool ? value['isVisible'] as bool : true,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is LoadedMultiPointProfile &&
+        other.profileId == profileId &&
+        other.order == order &&
+        other.isVisible == isVisible;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(profileId, order, isVisible);
   }
 }
 

@@ -14,12 +14,14 @@ class MultiPointProfilePage extends StatefulWidget {
 class _MultiPointProfilePageState extends State<MultiPointProfilePage> {
   late List<MultiPointProfile> _profiles;
   late String _activeProfileId;
+  late List<LoadedMultiPointProfile> _loadedProfiles;
 
   @override
   void initState() {
     super.initState();
     _profiles = widget.initialState.profiles.toList();
     _activeProfileId = widget.initialState.activeProfileId;
+    _loadedProfiles = widget.initialState.loadedProfiles.toList();
   }
 
   @override
@@ -41,7 +43,9 @@ class _MultiPointProfilePageState extends State<MultiPointProfilePage> {
               child: ListTile(
                 leading: const Icon(Icons.playlist_add_check),
                 title: Text('当前配置：${activeProfile.name}'),
-                subtitle: Text('共 ${_profiles.length} 套配置'),
+                subtitle: Text(
+                  '共 ${_profiles.length} 套配置，已加载 ${_loadedProfiles.length} 套',
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -49,8 +53,12 @@ class _MultiPointProfilePageState extends State<MultiPointProfilePage> {
               _ProfileTile(
                 profile: profile,
                 isActive: profile.id == _activeProfileId,
+                isLoaded: _isProfileLoaded(profile.id),
                 canDelete: _profiles.length > 1,
+                canUnload: _loadedProfiles.length > 1,
                 onSelect: () => _selectProfile(profile.id),
+                onLoadedChanged: (loaded) =>
+                    _setProfileLoaded(profile: profile, loaded: loaded),
                 onRename: () => _renameProfile(profile),
                 onCopy: () => _copyProfile(profile),
                 onDelete: () => _deleteProfile(profile),
@@ -83,6 +91,7 @@ class _MultiPointProfilePageState extends State<MultiPointProfilePage> {
     setState(() {
       _profiles = [..._profiles, profile];
       _activeProfileId = profile.id;
+      _normalizeLoadedProfiles();
     });
   }
 
@@ -97,6 +106,41 @@ class _MultiPointProfilePageState extends State<MultiPointProfilePage> {
     setState(() {
       _profiles = [..._profiles, copy];
       _activeProfileId = copy.id;
+      _normalizeLoadedProfiles();
+    });
+  }
+
+  void _setProfileLoaded({
+    required MultiPointProfile profile,
+    required bool loaded,
+  }) {
+    if (loaded && !profile.targets.hasEnabledTarget) {
+      _showMessage('请至少启用 1 个点位后再加载到执行区。');
+      return;
+    }
+    if (!loaded && _loadedProfiles.length <= 1) {
+      _showMessage('至少需要保留 1 套已加载配置。');
+      return;
+    }
+
+    setState(() {
+      if (loaded) {
+        if (!_isProfileLoaded(profile.id)) {
+          _loadedProfiles = [
+            ..._loadedProfiles,
+            LoadedMultiPointProfile(
+              profileId: profile.id,
+              order: _loadedProfiles.length + 1,
+              isVisible: true,
+            ),
+          ];
+        }
+      } else {
+        _loadedProfiles = _loadedProfiles
+            .where((loadedProfile) => loadedProfile.profileId != profile.id)
+            .toList(growable: false);
+      }
+      _normalizeLoadedProfiles();
     });
   }
 
@@ -164,6 +208,10 @@ class _MultiPointProfilePageState extends State<MultiPointProfilePage> {
     setState(() {
       _profiles = nextProfiles;
       _activeProfileId = nextActiveProfileId;
+      _loadedProfiles = _loadedProfiles
+          .where((loadedProfile) => loadedProfile.profileId != profile.id)
+          .toList(growable: false);
+      _normalizeLoadedProfiles();
     });
   }
 
@@ -173,9 +221,26 @@ class _MultiPointProfilePageState extends State<MultiPointProfilePage> {
         state: MultiPointProfileState(
           profiles: _profiles,
           activeProfileId: _activeProfileId,
+          loadedProfiles: _loadedProfiles,
         ),
       ),
     );
+  }
+
+  bool _isProfileLoaded(String profileId) {
+    return _loadedProfiles.any(
+      (loadedProfile) => loadedProfile.profileId == profileId,
+    );
+  }
+
+  void _normalizeLoadedProfiles() {
+    final state = MultiPointProfileState(
+      profiles: _profiles,
+      activeProfileId: _activeProfileId,
+      loadedProfiles: _loadedProfiles,
+    );
+    _activeProfileId = state.activeProfileId;
+    _loadedProfiles = state.loadedProfiles.toList();
   }
 
   String _nextProfileId() {
@@ -219,8 +284,11 @@ class _ProfileTile extends StatelessWidget {
   const _ProfileTile({
     required this.profile,
     required this.isActive,
+    required this.isLoaded,
     required this.canDelete,
+    required this.canUnload,
     required this.onSelect,
+    required this.onLoadedChanged,
     required this.onRename,
     required this.onCopy,
     required this.onDelete,
@@ -228,8 +296,11 @@ class _ProfileTile extends StatelessWidget {
 
   final MultiPointProfile profile;
   final bool isActive;
+  final bool isLoaded;
   final bool canDelete;
+  final bool canUnload;
   final VoidCallback onSelect;
+  final ValueChanged<bool> onLoadedChanged;
   final VoidCallback onRename;
   final VoidCallback onCopy;
   final VoidCallback onDelete;
@@ -245,8 +316,16 @@ class _ProfileTile extends StatelessWidget {
           color: isActive ? colorScheme.primary : colorScheme.outline,
         ),
         title: Text(profile.name),
-        subtitle: Text(
-          '点位 ${profile.targets.length} 个，启用 ${profile.targets.enabledTargets.length} 个',
+        subtitle: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text:
+                    '点位 ${profile.targets.length} 个，启用 ${profile.targets.enabledTargets.length} 个',
+              ),
+              TextSpan(text: isLoaded ? ' · 已加载' : ' · 未加载'),
+            ],
+          ),
         ),
         onTap: onSelect,
         trailing: PopupMenuButton<_ProfileAction>(
@@ -257,6 +336,12 @@ class _ProfileTile extends StatelessWidget {
               switch (action) {
                 case _ProfileAction.select:
                   onSelect();
+                  break;
+                case _ProfileAction.load:
+                  onLoadedChanged(true);
+                  break;
+                case _ProfileAction.unload:
+                  onLoadedChanged(false);
                   break;
                 case _ProfileAction.copy:
                   onCopy();
@@ -278,6 +363,22 @@ class _ProfileTile extends StatelessWidget {
                 child: const ListTile(
                   leading: Icon(Icons.check_circle_outline),
                   title: Text('选用'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _ProfileAction.load,
+                enabled: !isLoaded,
+                child: const ListTile(
+                  leading: Icon(Icons.playlist_add),
+                  title: Text('加载到执行区'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _ProfileAction.unload,
+                enabled: isLoaded && canUnload,
+                child: const ListTile(
+                  leading: Icon(Icons.playlist_remove),
+                  title: Text('从执行区卸载'),
                 ),
               ),
               const PopupMenuItem(
@@ -307,7 +408,7 @@ class _ProfileTile extends StatelessWidget {
   }
 }
 
-enum _ProfileAction { select, copy, rename, delete }
+enum _ProfileAction { select, load, unload, copy, rename, delete }
 
 class _RenameProfileDialog extends StatefulWidget {
   const _RenameProfileDialog({required this.initialName});

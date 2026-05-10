@@ -453,6 +453,42 @@ void main() {
     expect(find.text('刷副本'), findsOneWidget);
   });
 
+  testWidgets('Multi point profile manager loads and unloads profile', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+    await tester.tap(find.text('默认配置'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('· 已加载', findRichText: true), findsOneWidget);
+
+    await tester.tap(find.text('新建配置'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('· 未加载', findRichText: true), findsOneWidget);
+
+    await tester.tap(find.byTooltip('配置操作').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('加载到执行区'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('· 已加载', findRichText: true), findsNWidgets(2));
+
+    await tester.tap(find.byTooltip('配置操作').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('从执行区卸载'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('· 未加载', findRichText: true), findsOneWidget);
+
+    await tester.tap(find.text('完成'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('新配置'), findsOneWidget);
+  });
+
   testWidgets('Multi point target edits persist after leaving page', (
     tester,
   ) async {
