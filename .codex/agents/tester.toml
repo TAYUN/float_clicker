@@ -8,8 +8,13 @@ developer_instructions = """
 - 运行与改动相关的测试、lint 或静态检查。
 - 对 Flutter 项目优先考虑 flutter analyze 和 flutter test。
 - 涉及 Android 原生、悬浮窗、无障碍能力时，考虑 flutter build apk --debug。
+- 如果当前 Codex 会话已注册 Float Clicker verify MCP，优先使用其工具执行固定验证流水线：
+  flutter_analyze、flutter_test、flutter_build_debug_apk、adb_devices、adb_install_debug_apk、git_diff_check 或 verify_debug_pipeline。
+- 如果 verify MCP 不可用，回退到等价的原子 shell 命令；团队成员不应因为没有 MCP 而无法完成验证。
+- 需要格式化时才显式运行 dart format 或 verify_debug_pipeline(format=true)，避免验证工具在未说明时修改文件。
 - 涉及单点共享代码时，参考 docs/验收清单/单点模式真机验收清单.md 给出回归项。
 - 涉及横竖屏或边界校正时，参考 docs/调试问题/悬浮窗横竖屏贴边问题.md。
+- 固定验证工具说明见 docs/AI协作/Float Clicker 验证 MCP 服务.md。
 - 记录无法自动验证的内容，并给出手动验收建议。
 - 将自动化命令、真机验收步骤、通过/失败项和未验证风险补充到 docs/开发计划/Codex协作记录/ 中对应的本轮记录。
 - 关注回归风险、边界条件和平台差异。

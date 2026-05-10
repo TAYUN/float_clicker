@@ -12,6 +12,8 @@
 
 ## 2. 常用命令
 
+原子命令是团队验证基线；任何成员即使没有 MCP，也应能用下面命令完成验证。
+
 Flutter 静态检查：
 
 ```powershell
@@ -30,12 +32,42 @@ Android debug 包构建：
 flutter build apk --debug
 ```
 
+交付前空白检查：
+
+```powershell
+git diff --check
+```
+
+如果已注册 Float Clicker verify MCP，Codex/AI 可以优先使用结构化工具：
+
+```text
+flutter_analyze
+flutter_test
+flutter_build_debug_apk
+adb_devices
+adb_install_debug_apk
+git_diff_check
+verify_debug_pipeline
+```
+
+MCP 是可选增强，不是团队硬依赖。MCP 失败时应回退到等价原子命令；MCP 返回 `success=false` 时，优先查看 `failedStep`、`errorCode`、`summary` 和 `logPath`。
+
+格式化会修改文件，必须显式触发：
+
+```powershell
+dart format lib test
+```
+
+或在 MCP 中显式使用 `dart_format` / `verify_debug_pipeline(format=true)`。
+
 建议顺序：
 
 1. 纯 Dart/Flutter 模型或 store 改动：`flutter analyze` + `flutter test`。
 2. Flutter 页面改动：`flutter analyze` + `flutter test`，必要时手动跑 App。
 3. Android 原生或 MethodChannel 改动：以上命令再加 `flutter build apk --debug`。
-4. 悬浮窗、无障碍、权限、横竖屏：必须补真机验收说明。
+4. 需要安装 debug 包时：先 `adb devices`，再 `adb install -r build\app\outputs\flutter-apk\app-debug.apk`。
+5. 交付前运行 `git diff --check`。
+6. 悬浮窗、无障碍、权限、横竖屏：必须补真机验收说明。
 
 ## 3. 当前测试文件
 

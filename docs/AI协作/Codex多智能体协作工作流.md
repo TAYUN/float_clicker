@@ -9,6 +9,7 @@ Float Clicker 的 Codex 协作体系由以下几类入口组成：
 - `AGENTS.md`：项目级长期规则，定义 Codex 进入项目后必须遵守的协作原则、项目边界和交付格式。
 - `.codex/agents/`：角色型子智能体配置，用于把复杂任务拆成探索、规划、实现、验证、汇总几个职责。
 - `.codex/skills/`：可复用工作流，把多角色协作流程固化成可反复使用的技能。
+- `tools/float_clicker_verify_mcp/`：项目本地验证 MCP 服务，供 Codex/AI 可选调用固定验证流水线。
 - `docs/AI协作/`：AI 协作说明、工作流文档和新对话交接提示词。
 - `docs/需求文档/`：业务需求、阶段设计和后续能力边界。
 - `docs/development/`：架构、代码规范、测试和发布等工程规则。
@@ -28,6 +29,7 @@ docs/development/              = 工程规范
 docs/验收清单/                 = 验收和回归清单
 docs/调试问题/                 = 调试问题沉淀
 docs/开发计划/Codex协作记录/  = 过程记录
+tools/float_clicker_verify_mcp/ = 可选 MCP 验证工具
 ```
 
 ## 2. 当前目录树
@@ -46,9 +48,14 @@ float_clicker/
 │  └─ skills/                             # 可复用的 Codex 工作流
 │     └─ multi-role-feature/              # Float Clicker 多角色功能开发流程
 │        └─ SKILL.md                      # 技能定义：触发场景、流程、模板
+├─ tools/
+│  └─ float_clicker_verify_mcp/            # 项目本地验证 MCP 服务
+│     ├─ server.py                         # stdio MCP server，封装固定验证命令
+│     └─ README.md                         # MCP 工具、配置和调用说明
 └─ docs/
    ├─ AI协作/                             # AI 协作说明和交接文档
    │  ├─ 新对话交接提示词.md              # 新开 Codex 对话时恢复上下文
+   │  ├─ Float Clicker 验证 MCP 服务.md    # 固定验证命令的 MCP 工具说明
    │  └─ Codex多智能体协作工作流.md       # 当前这份工作流说明文档
    ├─ 需求文档/                           # 需求、设计边界和后续能力规划
    │  ├─ 单点模式需求文档.md
@@ -104,6 +111,7 @@ Codex 进入项目时优先读取的总入口。
 - 全局规则文件位置。
 - agents 目录位置。
 - skills 目录位置。
+- verify MCP 说明文档位置。
 - Codex 协作记录目录位置。
 - 默认工作流。
 - 当前开发焦点。
@@ -179,6 +187,35 @@ description: Float Clicker 复杂功能、多阶段任务、跨 Flutter/Android 
 - 重要文档入口。
 - 注意事项和阶段边界。
 
+### `tools/float_clicker_verify_mcp/`
+
+项目本地 MCP 服务，用来把固定验证命令封装为结构化工具。
+
+适合：
+
+- Codex/AI 多会话长期复用固定验证流水线。
+- 解析 `flutter test` 通过数量、构建结果、adb 设备状态和安装结果。
+- 返回 `success`、`summary`、`errorCode`、`logPath` 等结构化字段。
+
+不适合：
+
+- 代替所有临时 shell 命令。
+- 代替真机人工交互验收。
+- 成为团队成员必须安装和注册的硬依赖。
+
+团队成员没有 MCP 时，仍然可以直接运行等价命令：
+
+```powershell
+flutter analyze
+flutter test
+flutter build apk --debug
+adb devices
+adb install -r build\app\outputs\flutter-apk\app-debug.apk
+git diff --check
+```
+
+详细说明见 `docs/AI协作/Float Clicker 验证 MCP 服务.md`。
+
 ## 4. 角色分工
 
 ### Explorer
@@ -246,6 +283,9 @@ description: Float Clicker 复杂功能、多阶段任务、跨 Flutter/Android 
 - 运行相关测试、lint 或静态检查。
 - Flutter 改动优先运行 `flutter analyze` 和 `flutter test`。
 - Android 原生改动考虑 `flutter build apk --debug`。
+- 如果当前 Codex 会话已注册 Float Clicker verify MCP，优先调用 MCP 的固定验证工具获取结构化结果。
+- 如果 MCP 不可用，回退到等价的原子 shell 命令。
+- 需要格式化时才显式运行 `dart format` 或 `verify_debug_pipeline(format=true)`。
 - 涉及悬浮窗、权限、无障碍、横竖屏时列出真机验收项。
 - 涉及单点共享代码时补充单点回归项。
 - 将验证命令、真机步骤、结果和剩余风险补充到本轮 Codex 协作记录。
@@ -382,6 +422,54 @@ Next Steps
 - Reporter：确认阶段管理文档和协作记录是否同步，并在交付中标注路径。
 
 阶段总状态仍写入 `docs/开发计划/多点模式开发阶段管理.md`。协作记录只写本轮过程，避免阶段总表变成流水账。
+
+## 8. 验证工具工作流
+
+Float Clicker 的固定自动化验证有两种等价入口：
+
+```text
+MCP 工具入口：给 Codex/AI 使用，返回结构化结果
+原子 shell 命令：给任何团队成员使用，无需 MCP
+```
+
+MCP 优先用于：
+
+- 常规 `flutter analyze`、`flutter test`、`flutter build apk --debug`。
+- `adb devices` 和 debug APK 安装。
+- `git diff --check`。
+- 需要 AI 快速识别失败步骤和错误分类的场景。
+
+原子命令优先用于：
+
+- 没有注册 MCP 的成员。
+- 临时排查，例如 `rg`、`adb logcat`、`git diff`、查看文件。
+- 需要手工控制命令参数的专项调试。
+
+常用 MCP 工具：
+
+```text
+flutter_analyze
+flutter_test
+flutter_build_debug_apk
+adb_devices
+adb_install_debug_apk
+git_diff_check
+verify_debug_pipeline
+```
+
+`verify_debug_pipeline` 默认可执行 analyze、test、build、install 和 diff check。
+`format` 默认关闭；只有明确需要格式化时才传 `format=true`。
+
+如果 MCP 返回 `success=false`，Tester 应优先查看：
+
+- `failedStep`
+- `errorCode`
+- `summary`
+- `stdoutTail`
+- `stderrTail`
+- `logPath`
+
+然后再决定是修代码、补测试、检查设备，还是转入真机专项排查。
 
 ### `docs/调试问题/`
 

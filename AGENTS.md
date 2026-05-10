@@ -14,14 +14,16 @@ MethodChannel；Android 原生侧负责悬浮窗、无障碍点击、任务调�
 - 已完成全局悬浮外观配置，支持悬浮点位、控制条、独立控件分别缩放。
 - 已处理 `dispatchGesture()` 返回 `false` 和手势取消后的安全收尾。
 - 已给 `OverlayWindowHelper` 增加安全窗口操作封装。
-- 单点模式真机验收基本通过，后续改动必须保护单点回归。
+- 单点模式真机验收已完成完整回归，后续改动必须保护单点回归。
 - 多点模式已完成需求讨论和阶段拆分。
 - P1：Flutter 多点模型与持久化已完成。
 - P2：Flutter 多点页面已完成。
 - P3：Android 多点 Overlay 已完成，包含多点点位显示、控制组件复用、位置回传、横竖屏、互斥、权限撤销和窗口异常边界。
 - P4：通用手势执行与调度已完成。
-- P5：多点联调与真机验收进行中。
-- 当前推荐下一步是 P5 剩余专项验收：互斥、全禁用执行拒绝、权限撤销、无障碍断开和完整单点回归。
+- P5：多点联调与真机验收已验证。
+- P6：多配置管理已验证。
+- P7：多配置悬浮执行区正在按小阶段推进。
+- 当前推荐下一步以 `docs/开发计划/多点模式开发阶段管理.md` 的“当前下一步”为准。
 
 ## 2. 必读文档
 
@@ -38,6 +40,10 @@ MethodChannel；Android 原生侧负责悬浮窗、无障碍点击、任务调�
 后期多配置执行相关任务再阅读：
 
 - `docs/需求文档/悬浮多点多配置执行设计文档.md`
+
+Codex/AI 固定验证工具说明：
+
+- `docs/AI协作/Float Clicker 验证 MCP 服务.md`
 
 AI 交接提示词维护在：
 
@@ -79,21 +85,21 @@ Codex 计划、执行和验收过程记录维护在：
 - 配置导入导出。
 - 多任务并行执行。
 
-后期多配置执行以 `MultiPointProfile` 为核心，已经单独建档，不要混入当前 P1-P5。
+后期多配置执行以 `MultiPointProfile` 为核心，已经单独建档，并在 P6/P7 按小阶段推进。
 
-当前 P5 只做：
+当前 P7 只做：
 
-- 基础多点第一版的联调、真机验收、回归和风险收敛。
-- 验证权限、互斥、全禁用点位、悬浮窗权限撤销、无障碍断开、横竖屏和单点回归。
-- 只修验收中发现的明确可复现问题。
+- 多配置加载列表、多个执行控件、profile 绑定真实执行和执行控件位置持久化等已拆分小阶段。
+- 保持单任务执行模型，同一时间只运行一个 profile 任务。
+- 每个小阶段都先明确 Scope、Plan、Acceptance Criteria 和暂不做内容。
 - 更新阶段管理文档和 Codex 协作记录。
 
-当前 P5 不做：
+当前 P7 不做：
 
-- 多配置 profile。
-- 多个悬浮执行控件。
 - 高级连招。
-- 新 UI 能力或文档外优化。
+- 多任务并行执行。
+- 未计划的贴边展开、折叠面板、暂停/继续执行控件和复杂执行模式。
+- P8 长按、滑动、延迟和高级动作编排。
 
 ## 5. 多角色协作
 
@@ -141,6 +147,16 @@ flutter test
 ```powershell
 flutter build apk --debug
 ```
+
+交付前建议补充：
+
+```powershell
+git diff --check
+```
+
+如果当前 Codex 会话已注册 Float Clicker verify MCP，可优先使用 `verify_debug_pipeline`、`flutter_analyze`、`flutter_test`、`flutter_build_debug_apk`、`adb_devices`、`adb_install_debug_apk` 和 `git_diff_check` 获取结构化验证结果。MCP 是 Codex/AI 的可选增强；没有 MCP 时，团队成员仍按上述原子命令完成验证。
+
+需要格式化时才显式运行 `dart format` 或 `verify_debug_pipeline(format=true)`，避免验证步骤在未说明时修改文件。
 
 真机相关行为必须补充手动验收说明。
 

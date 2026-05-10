@@ -25,6 +25,14 @@ flutter analyze
 flutter test
 ```
 
+交付前建议补充：
+
+```powershell
+git diff --check
+```
+
+Codex/AI 可使用 Float Clicker verify MCP 辅助执行 debug 验证流水线，但发布和阶段交付检查仍以这些原子命令为团队基线。没有注册 MCP 的成员应直接运行等价命令。
+
 ## 3. 阶段交付检查
 
 每个多点阶段完成前检查：

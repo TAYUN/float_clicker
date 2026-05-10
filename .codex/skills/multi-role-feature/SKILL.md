@@ -42,6 +42,9 @@ description: Float Clicker 复杂功能、多阶段任务、跨 Flutter/Android 
 4. Tester 验证结果。
    - Flutter 改动优先运行 `flutter analyze` 和 `flutter test`。
    - Android 原生改动至少考虑 `flutter build apk --debug`。
+   - 如果当前 Codex 会话已注册 Float Clicker verify MCP，优先使用 `verify_debug_pipeline`、`flutter_analyze`、`flutter_test`、`flutter_build_debug_apk`、`adb_devices`、`adb_install_debug_apk` 和 `git_diff_check` 获取结构化验证结果。
+   - 如果 verify MCP 不可用，回退到等价的原子 shell 命令；不要把 MCP 作为团队成员完成验证的硬依赖。
+   - 需要格式化时才显式运行 `dart format` 或 `verify_debug_pipeline(format=true)`，避免验证步骤在未说明时修改文件。
    - 悬浮窗、权限、无障碍和横竖屏行为需要列出真机验收项。
    - 单点模式受影响时，参考 `docs/验收清单/单点模式真机验收清单.md` 回归。
    - 将验证命令、真机步骤、通过/失败项、未验证风险补充到本轮 Codex 协作记录。
@@ -54,21 +57,28 @@ description: Float Clicker 复杂功能、多阶段任务、跨 Flutter/Android 
 
 ## 本项目阶段边界提醒
 
-当前状态：P1 Flutter 多点模型与持久化、P2 Flutter 多点页面、P3 Android 多点 Overlay、P4 通用手势执行与调度均已完成；P5 多点联调与真机验收进行中。
+当前状态：P1 Flutter 多点模型与持久化、P2 Flutter 多点页面、P3 Android 多点 Overlay、P4 通用手势执行与调度、P5 多点联调与真机验收、P6 多配置管理均已完成并验证；P7 多配置悬浮执行区正在按小阶段推进。
 
-P5 只做：
+P7 当前只做：
 
-- 基础多点第一版的联调、真机验收、回归和风险收敛。
-- 验证权限、互斥、全禁用点位、悬浮窗权限撤销、无障碍断开、横竖屏和单点回归。
-- 只修验收中发现的明确可复现问题。
+- 多配置加载列表、多个执行控件、profile 绑定真实执行和执行控件位置持久化等小阶段能力。
+- 保持单任务执行模型，同一时间只运行一个 profile 任务。
+- 每个小阶段都先建计划记录，明确本次做什么、不做什么和验收标准。
 - 同步更新阶段管理文档和 `docs/开发计划/Codex协作记录/` 下的本轮记录。
 
-P5 不做：
+P7 当前不做：
 
 - 高级连招 UI。
-- 多配置 profile。
-- 多个悬浮执行控件。
-- 文档外优化或新 UI 能力。
+- 多任务并行执行。
+- 未计划的贴边展开、折叠面板、暂停/继续执行控件和复杂执行模式。
+- P8 长按、滑动、延迟和高级动作编排。
+
+## 固定验证工具
+
+- 项目提供可选的 Float Clicker verify MCP，说明见 `docs/AI协作/Float Clicker 验证 MCP 服务.md`。
+- MCP 适合 AI/Codex 获取结构化验证结果；团队成员没有 MCP 时仍可直接执行等价 shell 命令。
+- 常规固定验证可用 `verify_debug_pipeline`，它可按参数执行 analyze、test、build、adb install 和 `git diff --check`。
+- `dart_format` 或 `verify_debug_pipeline(format=true)` 会修改文件，只在明确需要格式化时使用。
 
 ## 计划与执行记录
 
