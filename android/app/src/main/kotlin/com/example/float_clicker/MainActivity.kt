@@ -104,6 +104,12 @@ class MainActivity : FlutterActivity() {
                     ),
                 )
             },
+            onPanelStateChanged = { isPanelCollapsed ->
+                channel.invokeMethod(
+                    "onMultiProfileExecutionPanelStateChanged",
+                    mapOf("isPanelCollapsed" to isPanelCollapsed),
+                )
+            },
         )
 
         // Flutter 侧只负责页面和配置；所有需要 Android 系统能力的操作都从这个通道进入。
@@ -307,6 +313,7 @@ class MainActivity : FlutterActivity() {
                     val shown = multiProfileExecutionOverlayManager.show(
                         loadedProfiles = loadedMultiPointProfilesFrom(call.arguments),
                         appearanceSettings = overlayAppearanceSettingsFrom(call.arguments),
+                        isPanelCollapsed = multiProfileExecutionPanelCollapsedFrom(call.arguments),
                     )
                     if (shown) {
                         result.success(null)
@@ -318,6 +325,7 @@ class MainActivity : FlutterActivity() {
                     val updated = multiProfileExecutionOverlayManager.update(
                         loadedProfiles = loadedMultiPointProfilesFrom(call.arguments),
                         appearanceSettings = overlayAppearanceSettingsFrom(call.arguments),
+                        isPanelCollapsed = multiProfileExecutionPanelCollapsedFrom(call.arguments),
                     )
                     if (updated) {
                         result.success(null)

@@ -42,6 +42,7 @@ class _MultiPointPageState extends State<MultiPointPage>
   bool _isLoadingSettings = true;
   bool _isModeEnabled = false;
   bool _isExecutionPreviewEnabled = false;
+  bool _isExecutionPanelCollapsed = false;
 
   bool get _canEditStructure => _taskRunState != TaskRunState.running;
 
@@ -64,6 +65,9 @@ class _MultiPointPageState extends State<MultiPointPage>
     _permissionService.setLoadedProfileButtonPositionChanged(
       _handleLoadedProfileButtonPositionChanged,
     );
+    _permissionService.setMultiProfileExecutionPanelStateChanged(
+      _handleMultiProfileExecutionPanelStateChanged,
+    );
     _loadSavedConfiguration();
   }
 
@@ -72,6 +76,7 @@ class _MultiPointPageState extends State<MultiPointPage>
     _permissionService.setMultiPointOverlayStateChanged(null);
     _permissionService.setMultiPointTargetPositionChanged(null);
     _permissionService.setLoadedProfileButtonPositionChanged(null);
+    _permissionService.setMultiProfileExecutionPanelStateChanged(null);
     if (_isExecutionPreviewEnabled) {
       unawaited(_permissionService.hideMultiProfileExecutionOverlay());
     }
@@ -223,6 +228,7 @@ class _MultiPointPageState extends State<MultiPointPage>
         await _permissionService.updateMultiProfileExecutionOverlay(
           profileState: nextProfileState,
           appearanceSettings: _appearanceSettings,
+          isPanelCollapsed: _isExecutionPanelCollapsed,
         );
       } on PlatformException catch (error) {
         _showPlatformError(error, fallback: '无法刷新执行控件预览');
@@ -369,6 +375,7 @@ class _MultiPointPageState extends State<MultiPointPage>
         }
         setState(() {
           _isExecutionPreviewEnabled = false;
+          _isExecutionPanelCollapsed = false;
         });
         return;
       }
@@ -380,12 +387,14 @@ class _MultiPointPageState extends State<MultiPointPage>
       await _permissionService.showMultiProfileExecutionOverlay(
         profileState: nextProfileState,
         appearanceSettings: _appearanceSettings,
+        isPanelCollapsed: false,
       );
       if (!mounted) {
         return;
       }
       setState(() {
         _isExecutionPreviewEnabled = true;
+        _isExecutionPanelCollapsed = false;
       });
     } on PlatformException catch (error) {
       _showPlatformError(error, fallback: '无法开启执行控件预览');
@@ -403,6 +412,7 @@ class _MultiPointPageState extends State<MultiPointPage>
       await _permissionService.updateMultiProfileExecutionOverlay(
         profileState: profileState,
         appearanceSettings: _appearanceSettings,
+        isPanelCollapsed: _isExecutionPanelCollapsed,
       );
     } on PlatformException catch (error) {
       _showPlatformError(error, fallback: '无法刷新执行控件预览');
@@ -467,10 +477,33 @@ class _MultiPointPageState extends State<MultiPointPage>
         await _permissionService.updateMultiProfileExecutionOverlay(
           profileState: nextProfileState,
           appearanceSettings: _appearanceSettings,
+          isPanelCollapsed: _isExecutionPanelCollapsed,
         );
       } on PlatformException catch (error) {
         _showPlatformError(error, fallback: '无法刷新执行控件预览');
       }
+    }
+  }
+
+  Future<void> _setExecutionPanelCollapsed(bool collapsed) async {
+    if (!_isExecutionPreviewEnabled) {
+      return;
+    }
+
+    try {
+      await _permissionService.updateMultiProfileExecutionOverlay(
+        profileState: _profileState,
+        appearanceSettings: _appearanceSettings,
+        isPanelCollapsed: collapsed,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isExecutionPanelCollapsed = collapsed;
+      });
+    } on PlatformException catch (error) {
+      _showPlatformError(error, fallback: '无法切换执行控件组显示状态');
     }
   }
 
@@ -658,6 +691,18 @@ class _MultiPointPageState extends State<MultiPointPage>
     });
   }
 
+  Future<void> _handleMultiProfileExecutionPanelStateChanged(
+    MultiProfileExecutionPanelStateChange change,
+  ) async {
+    if (!mounted || !_isExecutionPreviewEnabled) {
+      return;
+    }
+
+    setState(() {
+      _isExecutionPanelCollapsed = change.isPanelCollapsed;
+    });
+  }
+
   MultiPointConfiguration _configurationFromSnapshot(
     MultiPointOverlaySnapshot snapshot, {
     required MultiPointConfiguration fallback,
@@ -795,7 +840,9 @@ class _MultiPointPageState extends State<MultiPointPage>
                   _ExecutionPreviewSection(
                     profileState: _profileState,
                     isPreviewEnabled: _isExecutionPreviewEnabled,
+                    isPanelCollapsed: _isExecutionPanelCollapsed,
                     canManageControls: !_isModeEnabled,
+                    onPanelCollapsedChanged: _setExecutionPanelCollapsed,
                     onVisibilityChanged: _setProfileExecutionControlVisible,
                   ),
                   if (_isModeEnabled) ...[
@@ -819,13 +866,17 @@ class _ExecutionPreviewSection extends StatelessWidget {
   const _ExecutionPreviewSection({
     required this.profileState,
     required this.isPreviewEnabled,
+    required this.isPanelCollapsed,
     required this.canManageControls,
+    required this.onPanelCollapsedChanged,
     required this.onVisibilityChanged,
   });
 
   final MultiPointProfileState profileState;
   final bool isPreviewEnabled;
+  final bool isPanelCollapsed;
   final bool canManageControls;
+  final ValueChanged<bool> onPanelCollapsedChanged;
   final void Function(MultiPointProfile profile, bool visible)
   onVisibilityChanged;
 
@@ -838,8 +889,18 @@ class _ExecutionPreviewSection extends StatelessWidget {
             leading: const Icon(Icons.dashboard_customize_outlined),
             title: const Text('执行控件'),
             subtitle: Text(
-              '${isPreviewEnabled ? '预览中' : '未预览'} · 已显示 ${profileState.loadedProfileIds.length} 个',
+              '${isPreviewEnabled ? '预览中' : '未预览'} · 已显示 ${profileState.loadedProfileIds.length} 个 · ${isPanelCollapsed ? '已收起' : '已展开'}',
             ),
+          ),
+          SwitchListTile(
+            key: const ValueKey('execution-panel-collapse-switch'),
+            secondary: const Icon(Icons.unfold_less),
+            title: const Text('收起执行控件组'),
+            subtitle: Text(isPanelCollapsed ? '悬浮区只保留恢复入口' : '悬浮区显示所有执行控件'),
+            value: isPanelCollapsed,
+            onChanged: isPreviewEnabled && canManageControls
+                ? onPanelCollapsedChanged
+                : null,
           ),
           const Divider(height: 1),
           for (final profile in profileState.profiles)

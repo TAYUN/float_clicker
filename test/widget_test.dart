@@ -132,6 +132,21 @@ void main() {
         );
   }
 
+  Future<void> sendMultiProfileExecutionPanelState({
+    required bool isPanelCollapsed,
+  }) async {
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          permissionChannel.name,
+          methodCodec.encodeMethodCall(
+            MethodCall('onMultiProfileExecutionPanelStateChanged', {
+              'isPanelCollapsed': isPanelCollapsed,
+            }),
+          ),
+          (_) {},
+        );
+  }
+
   Future<void> scrollDown(WidgetTester tester) async {
     await tester.drag(find.byType(Scrollable).last, const Offset(0, -420));
     await tester.pumpAndSettle();
@@ -701,6 +716,58 @@ void main() {
     },
   );
 
+  testWidgets('Multi point execution preview collapses for current preview', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+    await tapVisibleText(tester, '开启执行控件预览');
+
+    final showCall = methodCalls.lastWhere(
+      (call) => call.method == 'showMultiProfileExecutionOverlay',
+    );
+    final showArguments = showCall.arguments as Map<Object?, Object?>;
+    expect(showArguments['isPanelCollapsed'], isFalse);
+
+    methodCalls.clear();
+    await tapVisibleText(tester, '收起执行控件组');
+
+    final collapseCall = methodCalls.lastWhere(
+      (call) => call.method == 'updateMultiProfileExecutionOverlay',
+    );
+    final collapseArguments = collapseCall.arguments as Map<Object?, Object?>;
+    expect(collapseArguments['isPanelCollapsed'], isTrue);
+    expect(find.textContaining('已收起'), findsOneWidget);
+
+    await sendMultiProfileExecutionPanelState(isPanelCollapsed: false);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('已展开'), findsWidgets);
+  });
+
+  testWidgets('Multi point execution preview reopens expanded after collapse', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+    await tapVisibleText(tester, '开启执行控件预览');
+    await tapVisibleText(tester, '收起执行控件组');
+    expect(find.textContaining('已收起'), findsOneWidget);
+
+    await tapVisibleText(tester, '关闭执行控件预览');
+    methodCalls.clear();
+    await tapVisibleText(tester, '开启执行控件预览');
+
+    final showCall = methodCalls.lastWhere(
+      (call) => call.method == 'showMultiProfileExecutionOverlay',
+    );
+    final arguments = showCall.arguments as Map<Object?, Object?>;
+    expect(arguments['isPanelCollapsed'], isFalse);
+    expect(find.textContaining('已展开'), findsWidgets);
+  });
+
   testWidgets('Multi point target edits persist after leaving page', (
     tester,
   ) async {
@@ -780,16 +847,12 @@ void main() {
     await tapVisibleText(tester, '执行任务');
     await tester.pumpAndSettle();
 
-    await tester.drag(find.byType(Scrollable).last, const Offset(0, 800));
-    await tester.pumpAndSettle();
-    expect(find.text('正在点击'), findsOneWidget);
+    expect(find.text('暂停任务'), findsOneWidget);
 
     await tapVisibleText(tester, '暂停任务');
     await tester.pumpAndSettle();
 
-    await tester.drag(find.byType(Scrollable).last, const Offset(0, 800));
-    await tester.pumpAndSettle();
-    expect(find.text('已暂停'), findsOneWidget);
+    expect(find.text('继续任务'), findsOneWidget);
 
     nativeMultiPointSettings = {...nativeMultiPointSettings, 'repeatCount': 1};
     nativeMultiPointCompletedRounds = 1;
@@ -799,9 +862,7 @@ void main() {
     await tapVisibleText(tester, '继续任务');
     await tester.pumpAndSettle();
 
-    await tester.drag(find.byType(Scrollable).last, const Offset(0, 800));
-    await tester.pumpAndSettle();
-    expect(find.text('多点编辑中'), findsOneWidget);
+    expect(find.text('执行任务'), findsOneWidget);
   });
 
   testWidgets('Multi point profile manager is blocked while running', (

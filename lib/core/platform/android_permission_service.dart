@@ -15,6 +15,8 @@ typedef MultiPointTargetPositionChanged =
     FutureOr<void> Function(MultiPointTargetPositionChange change);
 typedef LoadedProfileButtonPositionChanged =
     FutureOr<void> Function(LoadedProfileButtonPositionChange change);
+typedef MultiProfileExecutionPanelStateChanged =
+    FutureOr<void> Function(MultiProfileExecutionPanelStateChange change);
 typedef AndroidPermissionStateChanged =
     FutureOr<void> Function(AndroidPermissionSnapshot snapshot);
 
@@ -170,6 +172,20 @@ class LoadedProfileButtonPositionChange {
       profileId: (map['profileId'] as String?)?.trim() ?? '',
       x: (map['x'] as num?)?.toInt() ?? 0,
       y: (map['y'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class MultiProfileExecutionPanelStateChange {
+  const MultiProfileExecutionPanelStateChange({required this.isPanelCollapsed});
+
+  final bool isPanelCollapsed;
+
+  factory MultiProfileExecutionPanelStateChange.fromMap(
+    Map<Object?, Object?> map,
+  ) {
+    return MultiProfileExecutionPanelStateChange(
+      isPanelCollapsed: map['isPanelCollapsed'] == true,
     );
   }
 }
@@ -355,11 +371,15 @@ class AndroidPermissionService {
     required MultiPointProfileState profileState,
     GlobalOverlayAppearanceSettings appearanceSettings =
         GlobalOverlayAppearanceSettings.defaults,
+    bool isPanelCollapsed = false,
   }) async {
     await _invokeAndroidOnly(
       'showMultiProfileExecutionOverlay',
       arguments: {
         ..._loadedProfileArguments(profileState),
+        ..._multiProfileExecutionUiArguments(
+          isPanelCollapsed: isPanelCollapsed,
+        ),
         ..._globalOverlayAppearanceArguments(appearanceSettings),
       },
     );
@@ -369,11 +389,15 @@ class AndroidPermissionService {
     required MultiPointProfileState profileState,
     GlobalOverlayAppearanceSettings appearanceSettings =
         GlobalOverlayAppearanceSettings.defaults,
+    bool isPanelCollapsed = false,
   }) async {
     await _invokeAndroidOnly(
       'updateMultiProfileExecutionOverlay',
       arguments: {
         ..._loadedProfileArguments(profileState),
+        ..._multiProfileExecutionUiArguments(
+          isPanelCollapsed: isPanelCollapsed,
+        ),
         ..._globalOverlayAppearanceArguments(appearanceSettings),
       },
       ignoreMissingPlugin: true,
@@ -570,6 +594,16 @@ class AndroidPermissionService {
     }
   }
 
+  void setMultiProfileExecutionPanelStateChanged(
+    MultiProfileExecutionPanelStateChanged? onChanged,
+  ) {
+    if (onChanged == null) {
+      _multiProfileExecutionPanelStateListeners.remove(_listenerKey);
+    } else {
+      _multiProfileExecutionPanelStateListeners[_listenerKey] = onChanged;
+    }
+  }
+
   void setPermissionStateChanged(AndroidPermissionStateChanged? onChanged) {
     if (onChanged == null) {
       _permissionStateListeners.remove(_listenerKey);
@@ -681,6 +715,15 @@ class AndroidPermissionService {
     };
   }
 
+  Map<String, Object?> _multiProfileExecutionUiArguments({
+    required bool isPanelCollapsed,
+  }) {
+    return {
+      // P7.3.1 的收起状态只属于当前预览生命周期，关闭重开预览默认展开。
+      'isPanelCollapsed': isPanelCollapsed,
+    };
+  }
+
   Map<String, Object?> _globalOverlayAppearanceArguments(
     GlobalOverlayAppearanceSettings settings,
   ) {
@@ -709,6 +752,8 @@ class AndroidPermissionService {
   _multiPointTargetPositionListeners = {};
   static final Map<Object, LoadedProfileButtonPositionChanged>
   _loadedProfileButtonPositionListeners = {};
+  static final Map<Object, MultiProfileExecutionPanelStateChanged>
+  _multiProfileExecutionPanelStateListeners = {};
   static final Map<Object, AndroidPermissionStateChanged>
   _permissionStateListeners = {};
 
@@ -773,6 +818,16 @@ class AndroidPermissionService {
         }
         for (final listener in List<LoadedProfileButtonPositionChanged>.of(
           _loadedProfileButtonPositionListeners.values,
+        )) {
+          await listener(change);
+        }
+        return;
+      }
+
+      if (call.method == 'onMultiProfileExecutionPanelStateChanged') {
+        final change = MultiProfileExecutionPanelStateChange.fromMap(arguments);
+        for (final listener in List<MultiProfileExecutionPanelStateChanged>.of(
+          _multiProfileExecutionPanelStateListeners.values,
         )) {
           await listener(change);
         }

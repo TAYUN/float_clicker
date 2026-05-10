@@ -11,6 +11,7 @@ import android.widget.Toast
 internal class MultiProfileExecutionOverlayManager(
     private val context: Context,
     private val onButtonPositionChanged: (String, OverlayPoint) -> Unit = { _, _ -> },
+    private val onPanelStateChanged: (Boolean) -> Unit = {},
 ) {
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
@@ -31,18 +32,24 @@ internal class MultiProfileExecutionOverlayManager(
             return@Runnable
         }
 
-        if (!refreshButtons()) {
+        if (!refreshOverlay()) {
             hide()
         }
     }
     private val buttonComponents = mutableMapOf<String, MultiProfileExecutionButtonComponent>()
     private val buttonPositions = mutableMapOf<String, OverlayPoint>()
+    private val launcherComponent = MultiProfileExecutionLauncherComponent(
+        context = context,
+        overlayWindow = overlay,
+        onClick = ::expandPanelFromLauncher,
+    )
     private var taskStatus = MultiPointTaskStatus()
     private var runningProfileId: String? = null
     private var profiles = emptyList<LoadedMultiPointProfileState>()
     private var appearanceSettings = OverlayAppearanceSettings()
     private var metrics = OverlayComponentMetrics(overlay, appearanceSettings)
     private var isDisplayListenerRegistered = false
+    private var isPanelCollapsed = false
 
     var isShowing: Boolean = false
         private set
@@ -50,15 +57,17 @@ internal class MultiProfileExecutionOverlayManager(
     fun show(
         loadedProfiles: List<LoadedMultiPointProfileState>,
         appearanceSettings: OverlayAppearanceSettings,
+        isPanelCollapsed: Boolean,
     ): Boolean {
         profiles = normalizedProfiles(loadedProfiles)
         if (profiles.isEmpty()) {
             return false
         }
         this.appearanceSettings = appearanceSettings.normalized
+        this.isPanelCollapsed = isPanelCollapsed
         metrics = OverlayComponentMetrics(overlay, this.appearanceSettings)
         isShowing = true
-        if (!refreshButtons()) {
+        if (!refreshOverlay()) {
             hide()
             return false
         }
@@ -69,10 +78,12 @@ internal class MultiProfileExecutionOverlayManager(
     fun update(
         loadedProfiles: List<LoadedMultiPointProfileState>,
         appearanceSettings: OverlayAppearanceSettings = this.appearanceSettings,
+        isPanelCollapsed: Boolean = this.isPanelCollapsed,
     ): Boolean {
         val previousRunningProfileId = runningProfileId
         profiles = normalizedProfiles(loadedProfiles)
         this.appearanceSettings = appearanceSettings.normalized
+        this.isPanelCollapsed = isPanelCollapsed
         metrics = OverlayComponentMetrics(overlay, this.appearanceSettings)
         if (
             previousRunningProfileId != null &&
@@ -88,22 +99,23 @@ internal class MultiProfileExecutionOverlayManager(
             hide()
             return true
         }
-        return refreshButtons()
+        return refreshOverlay()
     }
 
     fun hide() {
         endActiveTask()
         isShowing = false
+        isPanelCollapsed = false
         mainHandler.removeCallbacks(displayBoundsRefreshRunnable)
-        buttonComponents.values.forEach { component -> component.remove() }
-        buttonComponents.clear()
+        removeButtonComponents()
+        launcherComponent.remove()
         removeDisplayListener()
     }
 
     fun updateAppearanceSettings(settings: OverlayAppearanceSettings) {
         appearanceSettings = settings.normalized
         metrics = OverlayComponentMetrics(overlay, appearanceSettings)
-        if (isShowing && !refreshButtons()) {
+        if (isShowing && !refreshOverlay()) {
             hide()
         }
     }
@@ -134,6 +146,7 @@ internal class MultiProfileExecutionOverlayManager(
     }
 
     private fun refreshButtons(): Boolean {
+        launcherComponent.remove()
         val profileIds = profiles.map { it.profileId }.toSet()
         val removedIds = buttonComponents.keys - profileIds
         for (removedId in removedIds) {
@@ -172,6 +185,48 @@ internal class MultiProfileExecutionOverlayManager(
         return true
     }
 
+    private fun refreshOverlay(): Boolean {
+        pruneRemovedProfiles()
+        if (!isPanelCollapsed) {
+            return refreshButtons()
+        }
+
+        // P7.3.1 收起态只保留一个固定位置恢复入口；拖动和持久化留到 P7.3.2。
+        removeButtonComponents()
+        val position = overlay.coercePositionPx(
+            OverlayPoint(DEFAULT_START_X, DEFAULT_START_Y),
+            widthPx = launcherSizePx(),
+            heightPx = launcherSizePx(),
+        )
+        return launcherComponent.show(position = position, metrics = metrics)
+    }
+
+    private fun expandPanelFromLauncher() {
+        isPanelCollapsed = false
+        onPanelStateChanged(false)
+        if (isShowing && !refreshOverlay()) {
+            hide()
+        }
+    }
+
+    private fun pruneRemovedProfiles() {
+        val profileIds = profiles.map { it.profileId }.toSet()
+        val removedIds = buttonComponents.keys - profileIds
+        for (removedId in removedIds) {
+            buttonComponents.remove(removedId)?.remove()
+            buttonPositions.remove(removedId)
+        }
+        val removedPositionIds = buttonPositions.keys - profileIds
+        for (removedId in removedPositionIds) {
+            buttonPositions.remove(removedId)
+        }
+    }
+
+    private fun removeButtonComponents() {
+        buttonComponents.values.forEach { component -> component.remove() }
+        buttonComponents.clear()
+    }
+
     private fun handleButtonClick(profileId: String) {
         val activeProfileId = runningProfileId
         if (activeProfileId == profileId) {
@@ -199,13 +254,13 @@ internal class MultiProfileExecutionOverlayManager(
             onStatusChanged = ::handleSchedulerStatusChanged,
         )
         if (result == MultiPointClickStartResult.STARTED) {
-            refreshButtons()
+            refreshOverlay()
             return
         }
 
         runningProfileId = null
         taskStatus = MultiPointTaskStatus()
-        refreshButtons()
+        refreshOverlay()
         showStartFailure(result)
     }
 
@@ -229,7 +284,7 @@ internal class MultiProfileExecutionOverlayManager(
         if (taskStatus.taskRunState == TaskRunState.IDLE) {
             runningProfileId = null
         }
-        if (isShowing && !refreshButtons()) {
+        if (isShowing && !refreshOverlay()) {
             hide()
         }
     }
@@ -287,6 +342,10 @@ internal class MultiProfileExecutionOverlayManager(
 
     private fun executionButtonHeightPx(): Int {
         return metrics.actionButtonSizePx.coerceAtLeast(overlay.dp(42))
+    }
+
+    private fun launcherSizePx(): Int {
+        return metrics.actionButtonSizePx.coerceAtLeast(overlay.dp(44))
     }
 
     private fun handleDisplayBoundsChanged() {

@@ -76,3 +76,8 @@ internal fun loadedMultiPointProfilesFrom(arguments: Any?): List<LoadedMultiPoin
         .sortedWith(compareBy<LoadedMultiPointProfileState> { it.order }.thenBy { it.profileId })
         .mapIndexed { index, profile -> profile.copy(order = index + 1) }
 }
+
+internal fun multiProfileExecutionPanelCollapsedFrom(arguments: Any?): Boolean {
+    val map = arguments as? Map<*, *> ?: return false
+    return map["isPanelCollapsed"] == true
+}
