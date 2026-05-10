@@ -43,6 +43,7 @@ class _MultiPointPageState extends State<MultiPointPage>
   bool _isModeEnabled = false;
   bool _isExecutionPreviewEnabled = false;
   bool _isExecutionPanelCollapsed = false;
+  MultiProfileExecutionLauncherPosition? _executionLauncherPosition;
 
   bool get _canEditStructure => _taskRunState != TaskRunState.running;
 
@@ -68,6 +69,9 @@ class _MultiPointPageState extends State<MultiPointPage>
     _permissionService.setMultiProfileExecutionPanelStateChanged(
       _handleMultiProfileExecutionPanelStateChanged,
     );
+    _permissionService.setMultiProfileExecutionLauncherPositionChanged(
+      _handleMultiProfileExecutionLauncherPositionChanged,
+    );
     _loadSavedConfiguration();
   }
 
@@ -77,6 +81,7 @@ class _MultiPointPageState extends State<MultiPointPage>
     _permissionService.setMultiPointTargetPositionChanged(null);
     _permissionService.setLoadedProfileButtonPositionChanged(null);
     _permissionService.setMultiProfileExecutionPanelStateChanged(null);
+    _permissionService.setMultiProfileExecutionLauncherPositionChanged(null);
     if (_isExecutionPreviewEnabled) {
       unawaited(_permissionService.hideMultiProfileExecutionOverlay());
     }
@@ -95,6 +100,8 @@ class _MultiPointPageState extends State<MultiPointPage>
   Future<void> _loadSavedConfiguration() async {
     final profileState = await _settingsStore.loadProfileState();
     final configuration = profileState.activeProfile.configuration;
+    final executionLauncherPosition = await _settingsStore
+        .loadExecutionLauncherPosition();
     final appearanceSettings = await _appearanceStore.load();
     final refreshResult = await _permissionService
         .refreshMultiPointStateWithAccessibilityRetry();
@@ -114,6 +121,7 @@ class _MultiPointPageState extends State<MultiPointPage>
       _appearanceSettings = appearanceSettings;
       _configuration = snapshotConfiguration;
       _profileState = snapshotProfileState;
+      _executionLauncherPosition = executionLauncherPosition;
       _isModeEnabled = refreshResult.overlaySnapshot.modeEnabled;
       _taskRunState = refreshResult.overlaySnapshot.modeEnabled
           ? refreshResult.overlaySnapshot.taskRunState
@@ -229,6 +237,7 @@ class _MultiPointPageState extends State<MultiPointPage>
           profileState: nextProfileState,
           appearanceSettings: _appearanceSettings,
           isPanelCollapsed: _isExecutionPanelCollapsed,
+          launcherPosition: _executionLauncherPosition,
         );
       } on PlatformException catch (error) {
         _showPlatformError(error, fallback: '无法刷新执行控件预览');
@@ -388,6 +397,7 @@ class _MultiPointPageState extends State<MultiPointPage>
         profileState: nextProfileState,
         appearanceSettings: _appearanceSettings,
         isPanelCollapsed: false,
+        launcherPosition: _executionLauncherPosition,
       );
       if (!mounted) {
         return;
@@ -413,6 +423,7 @@ class _MultiPointPageState extends State<MultiPointPage>
         profileState: profileState,
         appearanceSettings: _appearanceSettings,
         isPanelCollapsed: _isExecutionPanelCollapsed,
+        launcherPosition: _executionLauncherPosition,
       );
     } on PlatformException catch (error) {
       _showPlatformError(error, fallback: '无法刷新执行控件预览');
@@ -478,6 +489,7 @@ class _MultiPointPageState extends State<MultiPointPage>
           profileState: nextProfileState,
           appearanceSettings: _appearanceSettings,
           isPanelCollapsed: _isExecutionPanelCollapsed,
+          launcherPosition: _executionLauncherPosition,
         );
       } on PlatformException catch (error) {
         _showPlatformError(error, fallback: '无法刷新执行控件预览');
@@ -495,6 +507,7 @@ class _MultiPointPageState extends State<MultiPointPage>
         profileState: _profileState,
         appearanceSettings: _appearanceSettings,
         isPanelCollapsed: collapsed,
+        launcherPosition: _executionLauncherPosition,
       );
       if (!mounted) {
         return;
@@ -700,6 +713,23 @@ class _MultiPointPageState extends State<MultiPointPage>
 
     setState(() {
       _isExecutionPanelCollapsed = change.isPanelCollapsed;
+    });
+  }
+
+  Future<void> _handleMultiProfileExecutionLauncherPositionChanged(
+    MultiProfileExecutionLauncherPosition position,
+  ) async {
+    if (!mounted || !_isExecutionPreviewEnabled) {
+      return;
+    }
+
+    await _settingsStore.saveExecutionLauncherPosition(position);
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _executionLauncherPosition = position;
     });
   }
 

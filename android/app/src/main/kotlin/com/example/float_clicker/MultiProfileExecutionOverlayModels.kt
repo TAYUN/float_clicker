@@ -81,3 +81,13 @@ internal fun multiProfileExecutionPanelCollapsedFrom(arguments: Any?): Boolean {
     val map = arguments as? Map<*, *> ?: return false
     return map["isPanelCollapsed"] == true
 }
+
+internal fun multiProfileExecutionLauncherPositionFrom(arguments: Any?): OverlayPoint? {
+    val map = arguments as? Map<*, *> ?: return null
+    val x = (map["launcherPositionX"] as? Number)?.toInt()
+    val y = (map["launcherPositionY"] as? Number)?.toInt()
+    if (x == null || y == null) {
+        return null
+    }
+    return OverlayPoint(x = x, y = y)
+}

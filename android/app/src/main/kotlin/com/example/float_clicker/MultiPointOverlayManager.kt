@@ -82,6 +82,7 @@ internal class MultiPointOverlayManager(
     private var tapDurationMs = 50
     private var isModeEnabled = false
     private var isDisplayListenerRegistered = false
+    private var pendingAccessibilityDisconnectNotice = false
 
     val isShowing: Boolean
         get() = isModeEnabled
@@ -232,12 +233,13 @@ internal class MultiPointOverlayManager(
     }
 
     fun handleAccessibilityServiceDisconnected() {
-        if (taskStatus.taskRunState == TaskRunState.IDLE) {
+        if (taskStatus.taskRunState == TaskRunState.IDLE && !pendingAccessibilityDisconnectNotice) {
             return
         }
 
         end()
-        Toast.makeText(context.applicationContext, "无障碍服务已断开，多点任务已结束", Toast.LENGTH_SHORT).show()
+        pendingAccessibilityDisconnectNotice = false
+        Toast.makeText(context.applicationContext, "无障碍服务已断开，点击任务已结束", Toast.LENGTH_SHORT).show()
     }
 
     private fun applySettings(settings: MultiPointOverlaySettings) {
@@ -423,7 +425,14 @@ internal class MultiPointOverlayManager(
     }
 
     private fun handleSchedulerStatusChanged(status: MultiPointTaskStatus) {
+        val hadActiveTask = taskStatus.taskRunState != TaskRunState.IDLE
         taskStatus = if (isModeEnabled) status else MultiPointTaskStatus()
+        // 服务断开时调度器可能先回调 idle，再由连接态监听补提示；这里保留一次提示机会。
+        pendingAccessibilityDisconnectNotice = when {
+            taskStatus.taskRunState != TaskRunState.IDLE -> true
+            hadActiveTask && !AccessibilityGestureExecutor.isServiceAvailable -> true
+            else -> false
+        }
         syncTargetTouchableState()
         refreshTaskActionState()
         notifyOverlayStateChanged()

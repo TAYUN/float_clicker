@@ -147,6 +147,23 @@ void main() {
         );
   }
 
+  Future<void> sendMultiProfileExecutionLauncherPosition({
+    required int x,
+    required int y,
+  }) async {
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          permissionChannel.name,
+          methodCodec.encodeMethodCall(
+            MethodCall('onMultiProfileExecutionLauncherPositionChanged', {
+              'x': x,
+              'y': y,
+            }),
+          ),
+          (_) {},
+        );
+  }
+
   Future<void> scrollDown(WidgetTester tester) async {
     await tester.drag(find.byType(Scrollable).last, const Offset(0, -420));
     await tester.pumpAndSettle();
@@ -766,6 +783,31 @@ void main() {
     final arguments = showCall.arguments as Map<Object?, Object?>;
     expect(arguments['isPanelCollapsed'], isFalse);
     expect(find.textContaining('已展开'), findsWidgets);
+  });
+
+  testWidgets('Multi point execution launcher position persists', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+    await tapVisibleText(tester, '开启执行控件预览');
+    await tapVisibleText(tester, '收起执行控件组');
+
+    await sendMultiProfileExecutionLauncherPosition(x: 321, y: 432);
+    await tester.pumpAndSettle();
+
+    await tapVisibleText(tester, '关闭执行控件预览');
+    methodCalls.clear();
+    await tapVisibleText(tester, '开启执行控件预览');
+
+    final showCall = methodCalls.lastWhere(
+      (call) => call.method == 'showMultiProfileExecutionOverlay',
+    );
+    final arguments = showCall.arguments as Map<Object?, Object?>;
+    expect(arguments['isPanelCollapsed'], isFalse);
+    expect(arguments['launcherPositionX'], 321);
+    expect(arguments['launcherPositionY'], 432);
   });
 
   testWidgets('Multi point target edits persist after leaving page', (

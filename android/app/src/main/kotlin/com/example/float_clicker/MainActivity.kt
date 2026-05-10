@@ -110,6 +110,15 @@ class MainActivity : FlutterActivity() {
                     mapOf("isPanelCollapsed" to isPanelCollapsed),
                 )
             },
+            onLauncherPositionChanged = { point ->
+                channel.invokeMethod(
+                    "onMultiProfileExecutionLauncherPositionChanged",
+                    mapOf(
+                        "x" to point.x,
+                        "y" to point.y,
+                    ),
+                )
+            },
         )
 
         // Flutter 侧只负责页面和配置；所有需要 Android 系统能力的操作都从这个通道进入。
@@ -314,6 +323,7 @@ class MainActivity : FlutterActivity() {
                         loadedProfiles = loadedMultiPointProfilesFrom(call.arguments),
                         appearanceSettings = overlayAppearanceSettingsFrom(call.arguments),
                         isPanelCollapsed = multiProfileExecutionPanelCollapsedFrom(call.arguments),
+                        launcherPosition = multiProfileExecutionLauncherPositionFrom(call.arguments),
                     )
                     if (shown) {
                         result.success(null)
@@ -326,6 +336,7 @@ class MainActivity : FlutterActivity() {
                         loadedProfiles = loadedMultiPointProfilesFrom(call.arguments),
                         appearanceSettings = overlayAppearanceSettingsFrom(call.arguments),
                         isPanelCollapsed = multiProfileExecutionPanelCollapsedFrom(call.arguments),
+                        launcherPosition = multiProfileExecutionLauncherPositionFrom(call.arguments),
                     )
                     if (updated) {
                         result.success(null)

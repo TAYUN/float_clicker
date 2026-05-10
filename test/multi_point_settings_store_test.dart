@@ -348,6 +348,21 @@ void main() {
     expect(hiddenProfile.buttonPositionY, 444);
   });
 
+  test('execution launcher position persists independently', () async {
+    expect(await store.loadExecutionLauncherPosition(), isNull);
+
+    await store.saveExecutionLauncherPosition(
+      const MultiProfileExecutionLauncherPosition(x: 246, y: 369),
+    );
+
+    final position = await store.loadExecutionLauncherPosition();
+
+    expect(
+      position,
+      const MultiProfileExecutionLauncherPosition(x: 246, y: 369),
+    );
+  });
+
   test('bad loaded profiles json falls back to active profile', () async {
     SharedPreferences.setMockInitialValues({
       MultiPointSettingsStore.loadedProfileIdsJsonKey: '{bad-json',

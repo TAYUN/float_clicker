@@ -8,6 +8,7 @@ internal class MultiProfileExecutionLauncherComponent(
     context: Context,
     private val overlayWindow: OverlayWindowHelper,
     private val onClick: () -> Unit,
+    private val onPositionChanged: (OverlayPoint) -> Unit = {},
 ) {
     private var view: TextView? = null
     private var params: WindowManager.LayoutParams? = null
@@ -31,6 +32,12 @@ internal class MultiProfileExecutionLauncherComponent(
             if (!overlayWindow.addView(launcher, nextParams)) {
                 return false
             }
+            overlayWindow.bindDrag(
+                view = launcher,
+                params = nextParams,
+                onPositionChanged = onPositionChanged,
+                onClick = onClick,
+            )
             view = launcher
             params = nextParams
         } else {

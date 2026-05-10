@@ -12,6 +12,7 @@ internal class MultiProfileExecutionOverlayManager(
     private val context: Context,
     private val onButtonPositionChanged: (String, OverlayPoint) -> Unit = { _, _ -> },
     private val onPanelStateChanged: (Boolean) -> Unit = {},
+    private val onLauncherPositionChanged: (OverlayPoint) -> Unit = {},
 ) {
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
@@ -42,6 +43,7 @@ internal class MultiProfileExecutionOverlayManager(
         context = context,
         overlayWindow = overlay,
         onClick = ::expandPanelFromLauncher,
+        onPositionChanged = ::handleLauncherPositionChanged,
     )
     private var taskStatus = MultiPointTaskStatus()
     private var runningProfileId: String? = null
@@ -50,6 +52,8 @@ internal class MultiProfileExecutionOverlayManager(
     private var metrics = OverlayComponentMetrics(overlay, appearanceSettings)
     private var isDisplayListenerRegistered = false
     private var isPanelCollapsed = false
+    private var launcherPosition: OverlayPoint? = null
+    private var pendingAccessibilityDisconnectNotice = false
 
     var isShowing: Boolean = false
         private set
@@ -58,6 +62,7 @@ internal class MultiProfileExecutionOverlayManager(
         loadedProfiles: List<LoadedMultiPointProfileState>,
         appearanceSettings: OverlayAppearanceSettings,
         isPanelCollapsed: Boolean,
+        launcherPosition: OverlayPoint?,
     ): Boolean {
         profiles = normalizedProfiles(loadedProfiles)
         if (profiles.isEmpty()) {
@@ -65,6 +70,7 @@ internal class MultiProfileExecutionOverlayManager(
         }
         this.appearanceSettings = appearanceSettings.normalized
         this.isPanelCollapsed = isPanelCollapsed
+        this.launcherPosition = launcherPosition
         metrics = OverlayComponentMetrics(overlay, this.appearanceSettings)
         isShowing = true
         if (!refreshOverlay()) {
@@ -79,11 +85,13 @@ internal class MultiProfileExecutionOverlayManager(
         loadedProfiles: List<LoadedMultiPointProfileState>,
         appearanceSettings: OverlayAppearanceSettings = this.appearanceSettings,
         isPanelCollapsed: Boolean = this.isPanelCollapsed,
+        launcherPosition: OverlayPoint? = this.launcherPosition,
     ): Boolean {
         val previousRunningProfileId = runningProfileId
         profiles = normalizedProfiles(loadedProfiles)
         this.appearanceSettings = appearanceSettings.normalized
         this.isPanelCollapsed = isPanelCollapsed
+        this.launcherPosition = launcherPosition
         metrics = OverlayComponentMetrics(overlay, this.appearanceSettings)
         if (
             previousRunningProfileId != null &&
@@ -138,11 +146,12 @@ internal class MultiProfileExecutionOverlayManager(
     }
 
     fun handleAccessibilityServiceDisconnected() {
-        if (taskStatus.taskRunState == TaskRunState.IDLE) {
+        if (taskStatus.taskRunState == TaskRunState.IDLE && !pendingAccessibilityDisconnectNotice) {
             return
         }
 
-        endActiveTask("无障碍服务已断开，当前配置任务已结束")
+        endActiveTask("无障碍服务已断开，点击任务已结束")
+        pendingAccessibilityDisconnectNotice = false
     }
 
     private fun refreshButtons(): Boolean {
@@ -191,13 +200,9 @@ internal class MultiProfileExecutionOverlayManager(
             return refreshButtons()
         }
 
-        // P7.3.1 收起态只保留一个固定位置恢复入口；拖动和持久化留到 P7.3.2。
+        // 收起态只保留一个恢复入口；P7.3.2 起恢复入口位置由 Flutter 持久化。
         removeButtonComponents()
-        val position = overlay.coercePositionPx(
-            OverlayPoint(DEFAULT_START_X, DEFAULT_START_Y),
-            widthPx = launcherSizePx(),
-            heightPx = launcherSizePx(),
-        )
+        val position = coercedLauncherPosition()
         return launcherComponent.show(position = position, metrics = metrics)
     }
 
@@ -280,7 +285,14 @@ internal class MultiProfileExecutionOverlayManager(
     }
 
     private fun handleSchedulerStatusChanged(status: MultiPointTaskStatus) {
+        val hadActiveTask = taskStatus.taskRunState != TaskRunState.IDLE || runningProfileId != null
         taskStatus = if (isShowing) status else MultiPointTaskStatus()
+        // 无障碍断开可能先把任务状态回到 idle；保留提示机会，避免用户只看到任务消失。
+        pendingAccessibilityDisconnectNotice = when {
+            taskStatus.taskRunState != TaskRunState.IDLE -> true
+            hadActiveTask && !AccessibilityGestureExecutor.isServiceAvailable -> true
+            else -> false
+        }
         if (taskStatus.taskRunState == TaskRunState.IDLE) {
             runningProfileId = null
         }
@@ -334,6 +346,33 @@ internal class MultiProfileExecutionOverlayManager(
             x = DEFAULT_START_X,
             y = DEFAULT_START_Y + index * DEFAULT_VERTICAL_GAP,
         )
+    }
+
+    private fun coercedLauncherPosition(): OverlayPoint {
+        val previousPosition = launcherPosition
+        val nextPosition = overlay.coercePositionPx(
+            previousPosition ?: OverlayPoint(DEFAULT_START_X, DEFAULT_START_Y),
+            widthPx = launcherSizePx(),
+            heightPx = launcherSizePx(),
+        )
+        if (nextPosition != previousPosition) {
+            launcherPosition = nextPosition
+            // 只有已有持久化坐标被边界校正时才回传，避免首次默认位置也写入偏好。
+            if (previousPosition != null) {
+                onLauncherPositionChanged(nextPosition)
+            }
+        }
+        return nextPosition
+    }
+
+    private fun handleLauncherPositionChanged(position: OverlayPoint) {
+        val nextPosition = overlay.coercePositionPx(
+            position,
+            widthPx = launcherSizePx(),
+            heightPx = launcherSizePx(),
+        )
+        launcherPosition = nextPosition
+        onLauncherPositionChanged(nextPosition)
     }
 
     private fun executionButtonWidthPx(): Int {

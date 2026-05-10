@@ -32,6 +32,10 @@ class MultiPointSettingsStore {
   static const actionButtonPositionYKey =
       'multi_point.action_button_position_y';
   static const isToolbarCollapsedKey = 'multi_point.is_toolbar_collapsed';
+  static const executionLauncherPositionXKey =
+      'multi_point.execution_launcher_position_x';
+  static const executionLauncherPositionYKey =
+      'multi_point.execution_launcher_position_y';
 
   Future<MultiPointConfiguration> loadConfiguration() async {
     return (await loadProfileState()).activeProfile.configuration;
@@ -100,6 +104,27 @@ class MultiPointSettingsStore {
     final preferences = await SharedPreferences.getInstance();
     await _saveProfileState(preferences, state);
     return _readProfileState(preferences);
+  }
+
+  Future<MultiProfileExecutionLauncherPosition?>
+  loadExecutionLauncherPosition() async {
+    final preferences = await SharedPreferences.getInstance();
+    final x = preferences.getInt(executionLauncherPositionXKey);
+    final y = preferences.getInt(executionLauncherPositionYKey);
+    if (x == null || y == null) {
+      return null;
+    }
+    return MultiProfileExecutionLauncherPosition(x: x, y: y);
+  }
+
+  Future<void> saveExecutionLauncherPosition(
+    MultiProfileExecutionLauncherPosition position,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    await Future.wait([
+      preferences.setInt(executionLauncherPositionXKey, position.x),
+      preferences.setInt(executionLauncherPositionYKey, position.y),
+    ]);
   }
 
   Future<MultiPointProfileState> createProfile({String? name}) async {

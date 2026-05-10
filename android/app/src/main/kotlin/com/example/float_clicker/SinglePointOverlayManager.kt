@@ -38,6 +38,7 @@ class SinglePointOverlayManager(
     private var repeatCount = 10
     private var infiniteLoop = false
     private var tapDurationMs = 50
+    private var pendingAccessibilityDisconnectNotice = false
 
     private val targetComponent = TargetOverlayComponent(
         context = context,
@@ -199,11 +200,16 @@ class SinglePointOverlayManager(
     }
 
     fun handleAccessibilityServiceDisconnected() {
-        if (taskStatus.taskRunState == TaskRunState.IDLE && taskStatus.executedCount == 0) {
+        if (
+            taskStatus.taskRunState == TaskRunState.IDLE &&
+            taskStatus.executedCount == 0 &&
+            !pendingAccessibilityDisconnectNotice
+        ) {
             return
         }
 
         end()
+        pendingAccessibilityDisconnectNotice = false
         Toast.makeText(context.applicationContext, "无障碍服务已断开，点击任务已结束", Toast.LENGTH_SHORT).show()
     }
 
@@ -228,7 +234,14 @@ class SinglePointOverlayManager(
     }
 
     private fun handleSchedulerStatusChanged(status: SinglePointTaskStatus) {
+        val hadActiveTask = taskStatus.taskRunState != TaskRunState.IDLE || taskStatus.executedCount != 0
         taskStatus = if (isShowing) status else SinglePointTaskStatus()
+        // 服务断开导致调度器先回到 idle 时，仍保留一次用户可见的断开提示。
+        pendingAccessibilityDisconnectNotice = when {
+            taskStatus.taskRunState != TaskRunState.IDLE || taskStatus.executedCount != 0 -> true
+            hadActiveTask && !AccessibilityGestureExecutor.isServiceAvailable -> true
+            else -> false
+        }
         targetComponent.setTouchable(taskStatus.taskRunState != TaskRunState.RUNNING)
         refreshTaskActionState()
         notifyOverlayStateChanged()

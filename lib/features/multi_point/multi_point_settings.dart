@@ -906,6 +906,38 @@ class LoadedMultiPointProfile {
   }
 }
 
+/// P7.3 恢复入口的位置。
+///
+/// 它是全局执行区 UI 状态，不绑定单个 profile，也不影响 P7.2.3 的执行控件位置。
+class MultiProfileExecutionLauncherPosition {
+  const MultiProfileExecutionLauncherPosition({
+    required this.x,
+    required this.y,
+  });
+
+  final int x;
+  final int y;
+
+  factory MultiProfileExecutionLauncherPosition.fromMap(
+    Map<Object?, Object?> map,
+  ) {
+    return MultiProfileExecutionLauncherPosition(
+      x: _readInt(map['x']) ?? 0,
+      y: _readInt(map['y']) ?? 0,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is MultiProfileExecutionLauncherPosition &&
+        other.x == x &&
+        other.y == y;
+  }
+
+  @override
+  int get hashCode => Object.hash(x, y);
+}
+
 int? _readInt(Object? value) {
   return switch (value) {
     int() => value,

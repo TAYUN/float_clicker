@@ -17,6 +17,8 @@ typedef LoadedProfileButtonPositionChanged =
     FutureOr<void> Function(LoadedProfileButtonPositionChange change);
 typedef MultiProfileExecutionPanelStateChanged =
     FutureOr<void> Function(MultiProfileExecutionPanelStateChange change);
+typedef MultiProfileExecutionLauncherPositionChanged =
+    FutureOr<void> Function(MultiProfileExecutionLauncherPosition position);
 typedef AndroidPermissionStateChanged =
     FutureOr<void> Function(AndroidPermissionSnapshot snapshot);
 
@@ -372,6 +374,7 @@ class AndroidPermissionService {
     GlobalOverlayAppearanceSettings appearanceSettings =
         GlobalOverlayAppearanceSettings.defaults,
     bool isPanelCollapsed = false,
+    MultiProfileExecutionLauncherPosition? launcherPosition,
   }) async {
     await _invokeAndroidOnly(
       'showMultiProfileExecutionOverlay',
@@ -379,6 +382,7 @@ class AndroidPermissionService {
         ..._loadedProfileArguments(profileState),
         ..._multiProfileExecutionUiArguments(
           isPanelCollapsed: isPanelCollapsed,
+          launcherPosition: launcherPosition,
         ),
         ..._globalOverlayAppearanceArguments(appearanceSettings),
       },
@@ -390,6 +394,7 @@ class AndroidPermissionService {
     GlobalOverlayAppearanceSettings appearanceSettings =
         GlobalOverlayAppearanceSettings.defaults,
     bool isPanelCollapsed = false,
+    MultiProfileExecutionLauncherPosition? launcherPosition,
   }) async {
     await _invokeAndroidOnly(
       'updateMultiProfileExecutionOverlay',
@@ -397,6 +402,7 @@ class AndroidPermissionService {
         ..._loadedProfileArguments(profileState),
         ..._multiProfileExecutionUiArguments(
           isPanelCollapsed: isPanelCollapsed,
+          launcherPosition: launcherPosition,
         ),
         ..._globalOverlayAppearanceArguments(appearanceSettings),
       },
@@ -604,6 +610,16 @@ class AndroidPermissionService {
     }
   }
 
+  void setMultiProfileExecutionLauncherPositionChanged(
+    MultiProfileExecutionLauncherPositionChanged? onChanged,
+  ) {
+    if (onChanged == null) {
+      _multiProfileExecutionLauncherPositionListeners.remove(_listenerKey);
+    } else {
+      _multiProfileExecutionLauncherPositionListeners[_listenerKey] = onChanged;
+    }
+  }
+
   void setPermissionStateChanged(AndroidPermissionStateChanged? onChanged) {
     if (onChanged == null) {
       _permissionStateListeners.remove(_listenerKey);
@@ -717,10 +733,16 @@ class AndroidPermissionService {
 
   Map<String, Object?> _multiProfileExecutionUiArguments({
     required bool isPanelCollapsed,
+    MultiProfileExecutionLauncherPosition? launcherPosition,
   }) {
     return {
       // P7.3.1 的收起状态只属于当前预览生命周期，关闭重开预览默认展开。
       'isPanelCollapsed': isPanelCollapsed,
+      // P7.3.2 只持久化恢复入口位置，避免把收起状态写成长期偏好。
+      if (launcherPosition != null) ...{
+        'launcherPositionX': launcherPosition.x,
+        'launcherPositionY': launcherPosition.y,
+      },
     };
   }
 
@@ -754,6 +776,8 @@ class AndroidPermissionService {
   _loadedProfileButtonPositionListeners = {};
   static final Map<Object, MultiProfileExecutionPanelStateChanged>
   _multiProfileExecutionPanelStateListeners = {};
+  static final Map<Object, MultiProfileExecutionLauncherPositionChanged>
+  _multiProfileExecutionLauncherPositionListeners = {};
   static final Map<Object, AndroidPermissionStateChanged>
   _permissionStateListeners = {};
 
@@ -830,6 +854,19 @@ class AndroidPermissionService {
           _multiProfileExecutionPanelStateListeners.values,
         )) {
           await listener(change);
+        }
+        return;
+      }
+
+      if (call.method == 'onMultiProfileExecutionLauncherPositionChanged') {
+        final position = MultiProfileExecutionLauncherPosition.fromMap(
+          arguments,
+        );
+        for (final listener
+            in List<MultiProfileExecutionLauncherPositionChanged>.of(
+              _multiProfileExecutionLauncherPositionListeners.values,
+            )) {
+          await listener(position);
         }
         return;
       }
