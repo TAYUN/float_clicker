@@ -92,7 +92,19 @@ class MainActivity : FlutterActivity() {
                 )
             },
         )
-        multiProfileExecutionOverlayManager = MultiProfileExecutionOverlayManager(this)
+        multiProfileExecutionOverlayManager = MultiProfileExecutionOverlayManager(
+            context = this,
+            onButtonPositionChanged = { profileId, point ->
+                channel.invokeMethod(
+                    "onLoadedProfileButtonPositionChanged",
+                    mapOf(
+                        "profileId" to profileId,
+                        "x" to point.x,
+                        "y" to point.y,
+                    ),
+                )
+            },
+        )
 
         // Flutter 侧只负责页面和配置；所有需要 Android 系统能力的操作都从这个通道进入。
         channel.setMethodCallHandler { call, result ->

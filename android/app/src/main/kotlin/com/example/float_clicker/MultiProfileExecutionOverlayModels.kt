@@ -9,6 +9,7 @@ internal data class LoadedMultiPointProfileState(
     val repeatCount: Int,
     val infiniteLoop: Boolean,
     val tapDurationMs: Int,
+    val buttonPosition: OverlayPoint?,
 ) {
     fun toClickTaskRequest(): MultiPointClickTaskRequest {
         return MultiPointClickTaskRequest(
@@ -49,7 +50,17 @@ internal data class LoadedMultiPointProfileState(
                 repeatCount = (settings["repeatCount"] as? Number)?.toInt() ?: 10,
                 infiniteLoop = settings["infiniteLoop"] as? Boolean ?: false,
                 tapDurationMs = (settings["tapDurationMs"] as? Number)?.toInt() ?: 50,
+                buttonPosition = buttonPositionFrom(map),
             )
+        }
+
+        private fun buttonPositionFrom(map: Map<*, *>): OverlayPoint? {
+            val x = (map["buttonPositionX"] as? Number)?.toInt()
+            val y = (map["buttonPositionY"] as? Number)?.toInt()
+            if (x == null || y == null) {
+                return null
+            }
+            return OverlayPoint(x = x, y = y)
         }
     }
 }

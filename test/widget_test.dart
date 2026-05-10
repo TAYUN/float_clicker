@@ -113,6 +113,25 @@ void main() {
         );
   }
 
+  Future<void> sendLoadedProfileButtonPosition({
+    required String profileId,
+    required int x,
+    required int y,
+  }) async {
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          permissionChannel.name,
+          methodCodec.encodeMethodCall(
+            MethodCall('onLoadedProfileButtonPositionChanged', {
+              'profileId': profileId,
+              'x': x,
+              'y': y,
+            }),
+          ),
+          (_) {},
+        );
+  }
+
   Future<void> scrollDown(WidgetTester tester) async {
     await tester.drag(find.byType(Scrollable).last, const Offset(0, -420));
     await tester.pumpAndSettle();
@@ -592,6 +611,32 @@ void main() {
     );
     expect(find.text('隐藏该配置控件'), findsOneWidget);
     expect(find.text('显示该配置控件'), findsOneWidget);
+  });
+
+  testWidgets('Multi point execution preview persists button position', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+    await tapVisibleText(tester, '开启执行控件预览');
+
+    await sendLoadedProfileButtonPosition(profileId: 'default', x: 144, y: 288);
+    await tester.pumpAndSettle();
+
+    await tapVisibleText(tester, '关闭执行控件预览');
+    methodCalls.clear();
+    await tapVisibleText(tester, '开启执行控件预览');
+
+    final showCall = methodCalls.lastWhere(
+      (call) => call.method == 'showMultiProfileExecutionOverlay',
+    );
+    final arguments = showCall.arguments as Map<Object?, Object?>;
+    final loadedProfiles = arguments['loadedProfiles'] as List<Object?>;
+    final profile = loadedProfiles.single as Map<Object?, Object?>;
+
+    expect(profile['buttonPositionX'], 144);
+    expect(profile['buttonPositionY'], 288);
   });
 
   testWidgets('Multi point target edits persist after leaving page', (

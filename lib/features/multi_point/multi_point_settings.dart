@@ -785,26 +785,40 @@ class LoadedMultiPointProfile {
     required this.profileId,
     required this.order,
     required this.isVisible,
+    this.buttonPositionX,
+    this.buttonPositionY,
   });
 
   final String profileId;
   final int order;
   final bool isVisible;
+  final int? buttonPositionX;
+  final int? buttonPositionY;
 
   LoadedMultiPointProfile copyWith({
     String? profileId,
     int? order,
     bool? isVisible,
+    int? buttonPositionX,
+    int? buttonPositionY,
   }) {
     return LoadedMultiPointProfile(
       profileId: profileId ?? this.profileId,
       order: order ?? this.order,
       isVisible: isVisible ?? this.isVisible,
+      buttonPositionX: buttonPositionX ?? this.buttonPositionX,
+      buttonPositionY: buttonPositionY ?? this.buttonPositionY,
     );
   }
 
   Map<String, Object?> toJson() {
-    return {'profileId': profileId, 'order': order, 'isVisible': isVisible};
+    return {
+      'profileId': profileId,
+      'order': order,
+      'isVisible': isVisible,
+      if (buttonPositionX != null) 'buttonPositionX': buttonPositionX,
+      if (buttonPositionY != null) 'buttonPositionY': buttonPositionY,
+    };
   }
 
   static LoadedMultiPointProfile? tryFromJson(
@@ -836,6 +850,8 @@ class LoadedMultiPointProfile {
       profileId: id,
       order: _readInt(value['order']) ?? fallbackOrder ?? 1,
       isVisible: value['isVisible'] is bool ? value['isVisible'] as bool : true,
+      buttonPositionX: _readInt(value['buttonPositionX']),
+      buttonPositionY: _readInt(value['buttonPositionY']),
     );
   }
 
@@ -844,12 +860,20 @@ class LoadedMultiPointProfile {
     return other is LoadedMultiPointProfile &&
         other.profileId == profileId &&
         other.order == order &&
-        other.isVisible == isVisible;
+        other.isVisible == isVisible &&
+        other.buttonPositionX == buttonPositionX &&
+        other.buttonPositionY == buttonPositionY;
   }
 
   @override
   int get hashCode {
-    return Object.hash(profileId, order, isVisible);
+    return Object.hash(
+      profileId,
+      order,
+      isVisible,
+      buttonPositionX,
+      buttonPositionY,
+    );
   }
 }
 

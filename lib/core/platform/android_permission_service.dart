@@ -13,6 +13,8 @@ typedef MultiPointOverlayStateChanged =
     FutureOr<void> Function(MultiPointOverlaySnapshot snapshot);
 typedef MultiPointTargetPositionChanged =
     FutureOr<void> Function(MultiPointTargetPositionChange change);
+typedef LoadedProfileButtonPositionChanged =
+    FutureOr<void> Function(LoadedProfileButtonPositionChange change);
 typedef AndroidPermissionStateChanged =
     FutureOr<void> Function(AndroidPermissionSnapshot snapshot);
 
@@ -148,6 +150,26 @@ class MultiPointTargetPositionChange {
       id: (map['id'] as String?)?.trim() ?? '',
       x: (map['x'] as num?)?.toDouble() ?? 0,
       y: (map['y'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
+class LoadedProfileButtonPositionChange {
+  const LoadedProfileButtonPositionChange({
+    required this.profileId,
+    required this.x,
+    required this.y,
+  });
+
+  final String profileId;
+  final int x;
+  final int y;
+
+  factory LoadedProfileButtonPositionChange.fromMap(Map<Object?, Object?> map) {
+    return LoadedProfileButtonPositionChange(
+      profileId: (map['profileId'] as String?)?.trim() ?? '',
+      x: (map['x'] as num?)?.toInt() ?? 0,
+      y: (map['y'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -538,6 +560,16 @@ class AndroidPermissionService {
     }
   }
 
+  void setLoadedProfileButtonPositionChanged(
+    LoadedProfileButtonPositionChanged? onChanged,
+  ) {
+    if (onChanged == null) {
+      _loadedProfileButtonPositionListeners.remove(_listenerKey);
+    } else {
+      _loadedProfileButtonPositionListeners[_listenerKey] = onChanged;
+    }
+  }
+
   void setPermissionStateChanged(AndroidPermissionStateChanged? onChanged) {
     if (onChanged == null) {
       _permissionStateListeners.remove(_listenerKey);
@@ -640,6 +672,10 @@ class AndroidPermissionService {
                   .toJson(),
               'targets': profilesById[loadedProfile.profileId]!.targets
                   .toJsonList(),
+              if (loadedProfile.buttonPositionX != null)
+                'buttonPositionX': loadedProfile.buttonPositionX,
+              if (loadedProfile.buttonPositionY != null)
+                'buttonPositionY': loadedProfile.buttonPositionY,
             },
       ],
     };
@@ -671,6 +707,8 @@ class AndroidPermissionService {
   _multiPointOverlayListeners = {};
   static final Map<Object, MultiPointTargetPositionChanged>
   _multiPointTargetPositionListeners = {};
+  static final Map<Object, LoadedProfileButtonPositionChanged>
+  _loadedProfileButtonPositionListeners = {};
   static final Map<Object, AndroidPermissionStateChanged>
   _permissionStateListeners = {};
 
@@ -721,6 +759,20 @@ class AndroidPermissionService {
         }
         for (final listener in List<MultiPointTargetPositionChanged>.of(
           _multiPointTargetPositionListeners.values,
+        )) {
+          await listener(change);
+        }
+        return;
+      }
+
+      if (call.method == 'onLoadedProfileButtonPositionChanged') {
+        final change = LoadedProfileButtonPositionChange.fromMap(arguments);
+        // profileId 是按钮位置的唯一归属，缺失时不能猜测到当前 active profile。
+        if (change.profileId.isEmpty) {
+          return;
+        }
+        for (final listener in List<LoadedProfileButtonPositionChanged>.of(
+          _loadedProfileButtonPositionListeners.values,
         )) {
           await listener(change);
         }

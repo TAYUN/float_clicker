@@ -10,6 +10,7 @@ import android.widget.Toast
 
 internal class MultiProfileExecutionOverlayManager(
     private val context: Context,
+    private val onButtonPositionChanged: (String, OverlayPoint) -> Unit = { _, _ -> },
 ) {
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
@@ -147,7 +148,11 @@ internal class MultiProfileExecutionOverlayManager(
                 MultiProfileExecutionButtonComponent(
                     context = context,
                     overlayWindow = overlay,
-                    onPositionChanged = { point -> buttonPositions[profile.profileId] = point },
+                    onPositionChanged = { point ->
+                        buttonPositions[profile.profileId] = point
+                        // P7.2.3 只在拖动结束时回传逻辑像素坐标，Flutter 负责持久化。
+                        onButtonPositionChanged(profile.profileId, point)
+                    },
                     onClick = {
                         handleButtonClick(profile.profileId)
                     },
@@ -261,7 +266,7 @@ internal class MultiProfileExecutionOverlayManager(
         index: Int,
     ): OverlayPoint {
         val fallback = defaultPosition(index)
-        val currentPosition = buttonPositions[profile.profileId] ?: fallback
+        val currentPosition = buttonPositions[profile.profileId] ?: profile.buttonPosition ?: fallback
         return overlay.coercePositionPx(
             currentPosition,
             widthPx = executionButtonWidthPx(),

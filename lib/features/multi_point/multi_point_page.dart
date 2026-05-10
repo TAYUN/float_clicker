@@ -61,6 +61,9 @@ class _MultiPointPageState extends State<MultiPointPage>
     _permissionService.setMultiPointTargetPositionChanged(
       _handleMultiPointTargetPositionChanged,
     );
+    _permissionService.setLoadedProfileButtonPositionChanged(
+      _handleLoadedProfileButtonPositionChanged,
+    );
     _loadSavedConfiguration();
   }
 
@@ -68,6 +71,7 @@ class _MultiPointPageState extends State<MultiPointPage>
   void dispose() {
     _permissionService.setMultiPointOverlayStateChanged(null);
     _permissionService.setMultiPointTargetPositionChanged(null);
+    _permissionService.setLoadedProfileButtonPositionChanged(null);
     if (_isExecutionPreviewEnabled) {
       unawaited(_permissionService.hideMultiProfileExecutionOverlay());
     }
@@ -609,6 +613,41 @@ class _MultiPointPageState extends State<MultiPointPage>
         _profileState,
         nextConfiguration,
       );
+    });
+  }
+
+  Future<void> _handleLoadedProfileButtonPositionChanged(
+    LoadedProfileButtonPositionChange change,
+  ) async {
+    if (!mounted) {
+      return;
+    }
+    final loadedProfileExists = _profileState.loadedProfiles.any(
+      (loadedProfile) => loadedProfile.profileId == change.profileId,
+    );
+    if (!loadedProfileExists) {
+      return;
+    }
+
+    final nextProfileState = await _settingsStore.saveProfileState(
+      _profileState.copyWith(
+        loadedProfiles: [
+          for (final loadedProfile in _profileState.loadedProfiles)
+            loadedProfile.profileId == change.profileId
+                ? loadedProfile.copyWith(
+                    buttonPositionX: change.x,
+                    buttonPositionY: change.y,
+                  )
+                : loadedProfile,
+        ],
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _profileState = nextProfileState;
     });
   }
 
