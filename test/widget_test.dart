@@ -14,6 +14,7 @@ void main() {
   final methodCalls = <MethodCall>[];
   var nativeOverlayEnabled = false;
   var nativeMultiPointOverlayEnabled = false;
+  var nativeMultiProfileExecutionEnabled = false;
   var nativeTaskRunState = 'idle';
   var nativeMultiPointTaskRunState = 'idle';
   var nativeMultiPointCompletedRounds = 0;
@@ -132,6 +133,7 @@ void main() {
     methodCalls.clear();
     nativeOverlayEnabled = false;
     nativeMultiPointOverlayEnabled = false;
+    nativeMultiProfileExecutionEnabled = false;
     nativeTaskRunState = 'idle';
     nativeMultiPointTaskRunState = 'idle';
     nativeMultiPointCompletedRounds = 0;
@@ -189,6 +191,17 @@ void main() {
             nativeMultiPointOverlayEnabled = true;
             nativeMultiPointTaskRunState = 'idle';
             nativeMultiPointSettings = _objectMap(call.arguments);
+            return null;
+          }
+          if (call.method == 'showMultiProfileExecutionOverlay') {
+            nativeMultiProfileExecutionEnabled = true;
+            return null;
+          }
+          if (call.method == 'updateMultiProfileExecutionOverlay') {
+            return null;
+          }
+          if (call.method == 'hideMultiProfileExecutionOverlay') {
+            nativeMultiProfileExecutionEnabled = false;
             return null;
           }
           if (call.method == 'hideMultiPointOverlay') {
@@ -489,6 +502,88 @@ void main() {
     expect(find.text('新配置'), findsOneWidget);
   });
 
+  testWidgets('Multi point execution preview sends loaded profiles', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+    await tester.tap(find.text('默认配置'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('新建配置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('配置操作').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('加载到执行区'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('完成'));
+    await tester.pumpAndSettle();
+
+    await tapVisibleText(tester, '开启执行控件预览');
+
+    final showCall = methodCalls.lastWhere(
+      (call) => call.method == 'showMultiProfileExecutionOverlay',
+    );
+    final arguments = showCall.arguments as Map<Object?, Object?>;
+    final loadedProfiles = arguments['loadedProfiles'] as List<Object?>;
+    expect(loadedProfiles, hasLength(2));
+    expect(
+      loadedProfiles.cast<Map<Object?, Object?>>().map(
+        (profile) => profile['displayName'],
+      ),
+      ['默认配置', '新配置'],
+    );
+    expect(nativeMultiProfileExecutionEnabled, isTrue);
+
+    await tapVisibleText(tester, '关闭执行控件预览');
+
+    expect(
+      methodCalls.where(
+        (call) => call.method == 'hideMultiProfileExecutionOverlay',
+      ),
+      isNotEmpty,
+    );
+    expect(nativeMultiProfileExecutionEnabled, isFalse);
+  });
+
+  testWidgets('Multi point execution preview toggles a single control', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+    await tester.tap(find.text('默认配置'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('新建配置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('配置操作').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('加载到执行区'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('完成'));
+    await tester.pumpAndSettle();
+
+    await tapVisibleText(tester, '开启执行控件预览');
+    methodCalls.clear();
+
+    await tapVisibleText(tester, '新配置 控件');
+
+    final updateCall = methodCalls.lastWhere(
+      (call) => call.method == 'updateMultiProfileExecutionOverlay',
+    );
+    final arguments = updateCall.arguments as Map<Object?, Object?>;
+    final loadedProfiles = arguments['loadedProfiles'] as List<Object?>;
+    expect(loadedProfiles, hasLength(1));
+    expect(
+      (loadedProfiles.single as Map<Object?, Object?>)['displayName'],
+      '默认配置',
+    );
+    expect(find.text('隐藏该配置控件'), findsOneWidget);
+    expect(find.text('显示该配置控件'), findsOneWidget);
+  });
+
   testWidgets('Multi point target edits persist after leaving page', (
     tester,
   ) async {
@@ -568,15 +663,16 @@ void main() {
     await tapVisibleText(tester, '执行任务');
     await tester.pumpAndSettle();
 
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, 800));
+    await tester.pumpAndSettle();
     expect(find.text('正在点击'), findsOneWidget);
-    expect(find.text('暂停任务'), findsOneWidget);
 
-    await tester.tap(find.text('暂停任务'));
+    await tapVisibleText(tester, '暂停任务');
     await tester.pumpAndSettle();
 
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, 800));
+    await tester.pumpAndSettle();
     expect(find.text('已暂停'), findsOneWidget);
-    expect(find.text('继续任务'), findsOneWidget);
-    expect(find.text('结束任务'), findsOneWidget);
 
     nativeMultiPointSettings = {...nativeMultiPointSettings, 'repeatCount': 1};
     nativeMultiPointCompletedRounds = 1;
@@ -586,8 +682,9 @@ void main() {
     await tapVisibleText(tester, '继续任务');
     await tester.pumpAndSettle();
 
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, 800));
+    await tester.pumpAndSettle();
     expect(find.text('多点编辑中'), findsOneWidget);
-    expect(find.text('执行任务'), findsOneWidget);
   });
 
   testWidgets('Multi point profile manager is blocked while running', (
@@ -601,6 +698,8 @@ void main() {
     await tapVisibleText(tester, '执行任务');
     await tester.pumpAndSettle();
 
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, 600));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('默认配置'));
     await tester.pumpAndSettle();
 

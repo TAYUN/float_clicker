@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -39,6 +41,7 @@ class _MultiPointPageState extends State<MultiPointPage>
   TaskRunState _taskRunState = TaskRunState.idle;
   bool _isLoadingSettings = true;
   bool _isModeEnabled = false;
+  bool _isExecutionPreviewEnabled = false;
 
   bool get _canEditStructure => _taskRunState != TaskRunState.running;
 
@@ -65,6 +68,9 @@ class _MultiPointPageState extends State<MultiPointPage>
   void dispose() {
     _permissionService.setMultiPointOverlayStateChanged(null);
     _permissionService.setMultiPointTargetPositionChanged(null);
+    if (_isExecutionPreviewEnabled) {
+      unawaited(_permissionService.hideMultiProfileExecutionOverlay());
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -203,6 +209,17 @@ class _MultiPointPageState extends State<MultiPointPage>
         _showPlatformError(error, fallback: '无法切换多点配置');
       }
     }
+
+    if (_isExecutionPreviewEnabled) {
+      try {
+        await _permissionService.updateMultiProfileExecutionOverlay(
+          profileState: nextProfileState,
+          appearanceSettings: _appearanceSettings,
+        );
+      } on PlatformException catch (error) {
+        _showPlatformError(error, fallback: '无法刷新执行控件预览');
+      }
+    }
   }
 
   Future<void> _addTarget() async {
@@ -290,6 +307,11 @@ class _MultiPointPageState extends State<MultiPointPage>
   }
 
   Future<void> _toggleModeEnabled() async {
+    if (_isExecutionPreviewEnabled) {
+      _showMessage('请先关闭执行控件预览，再开启多点悬浮层。');
+      return;
+    }
+
     try {
       if (_isModeEnabled) {
         await _permissionService.hideMultiPointOverlay();
@@ -316,6 +338,98 @@ class _MultiPointPageState extends State<MultiPointPage>
       });
     } on PlatformException catch (error) {
       _showPlatformError(error, fallback: '无法开启多点悬浮层');
+    }
+  }
+
+  Future<void> _toggleExecutionPreview() async {
+    if (_isModeEnabled) {
+      _showMessage('请先关闭多点悬浮层，再开启执行控件预览。');
+      return;
+    }
+
+    try {
+      if (_isExecutionPreviewEnabled) {
+        await _permissionService.hideMultiProfileExecutionOverlay();
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _isExecutionPreviewEnabled = false;
+        });
+        return;
+      }
+
+      await _saveConfiguration(_configuration);
+      await _permissionService.showMultiProfileExecutionOverlay(
+        profileState: _profileState,
+        appearanceSettings: _appearanceSettings,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isExecutionPreviewEnabled = true;
+      });
+    } on PlatformException catch (error) {
+      _showPlatformError(error, fallback: '无法开启执行控件预览');
+    }
+  }
+
+  Future<void> _setProfileExecutionControlVisible(
+    MultiPointProfile profile,
+    bool visible,
+  ) async {
+    if (_isModeEnabled) {
+      _showMessage('请先关闭多点悬浮层，再管理执行控件。');
+      return;
+    }
+    if (visible && !profile.targets.hasEnabledTarget) {
+      _showMessage('请至少启用 1 个点位后再显示执行控件。');
+      return;
+    }
+
+    final currentLoadedProfiles = _profileState.loadedProfiles;
+    final isCurrentlyVisible = _profileState.isProfileLoaded(profile.id);
+    if (visible == isCurrentlyVisible) {
+      return;
+    }
+    if (!visible && currentLoadedProfiles.length <= 1) {
+      _showMessage('至少需要保留 1 个执行控件。');
+      return;
+    }
+
+    final nextLoadedProfiles = visible
+        ? [
+            ...currentLoadedProfiles,
+            LoadedMultiPointProfile(
+              profileId: profile.id,
+              order: currentLoadedProfiles.length + 1,
+              isVisible: true,
+            ),
+          ]
+        : currentLoadedProfiles
+              .where((loadedProfile) => loadedProfile.profileId != profile.id)
+              .toList(growable: false);
+    final nextProfileState = await _settingsStore.saveProfileState(
+      _profileState.copyWith(loadedProfiles: nextLoadedProfiles),
+    );
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _profileState = nextProfileState;
+    });
+
+    if (_isExecutionPreviewEnabled) {
+      try {
+        await _permissionService.updateMultiProfileExecutionOverlay(
+          profileState: nextProfileState,
+          appearanceSettings: _appearanceSettings,
+        );
+      } on PlatformException catch (error) {
+        _showPlatformError(error, fallback: '无法刷新执行控件预览');
+      }
     }
   }
 
@@ -496,13 +610,18 @@ class _MultiPointPageState extends State<MultiPointPage>
               : profile,
       ],
       activeProfileId: state.activeProfileId,
+      loadedProfiles: state.loadedProfiles,
     );
   }
 
   void _showPlatformError(PlatformException error, {required String fallback}) {
     final message = switch (error.code) {
-      'mode_conflict' => '单点模式已开启，请先关闭单点模式。',
+      'mode_conflict' =>
+        (error.message?.trim().isNotEmpty ?? false)
+            ? error.message!.trim()
+            : '单点模式已开启，请先关闭单点模式。',
       'no_enabled_targets' => '请至少启用 1 个点位后再执行。',
+      'profile_empty' => '请至少加载 1 套配置后再开启执行控件预览。',
       'overlay_permission_denied' => '悬浮窗权限未开启，请先在系统设置中允许显示在其他应用上层。',
       'overlay_window_unavailable' => '多点悬浮窗创建失败，请确认悬浮窗权限仍然可用后重试。',
       'accessibility_service_unavailable' =>
@@ -584,6 +703,25 @@ class _MultiPointPageState extends State<MultiPointPage>
                     icon: Icon(_isModeEnabled ? Icons.close : Icons.layers),
                     label: Text(_isModeEnabled ? '关闭多点悬浮层' : '开启多点悬浮层'),
                   ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _toggleExecutionPreview,
+                    icon: Icon(
+                      _isExecutionPreviewEnabled
+                          ? Icons.close
+                          : Icons.dashboard_customize_outlined,
+                    ),
+                    label: Text(
+                      _isExecutionPreviewEnabled ? '关闭执行控件预览' : '开启执行控件预览',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _ExecutionPreviewSection(
+                    profileState: _profileState,
+                    isPreviewEnabled: _isExecutionPreviewEnabled,
+                    canManageControls: !_isModeEnabled,
+                    onVisibilityChanged: _setProfileExecutionControlVisible,
+                  ),
                   if (_isModeEnabled) ...[
                     const SizedBox(height: 12),
                     _TaskControls(
@@ -596,6 +734,54 @@ class _MultiPointPageState extends State<MultiPointPage>
                   ],
                 ],
               ),
+      ),
+    );
+  }
+}
+
+class _ExecutionPreviewSection extends StatelessWidget {
+  const _ExecutionPreviewSection({
+    required this.profileState,
+    required this.isPreviewEnabled,
+    required this.canManageControls,
+    required this.onVisibilityChanged,
+  });
+
+  final MultiPointProfileState profileState;
+  final bool isPreviewEnabled;
+  final bool canManageControls;
+  final void Function(MultiPointProfile profile, bool visible)
+  onVisibilityChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Column(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.dashboard_customize_outlined),
+            title: const Text('执行控件'),
+            subtitle: Text(
+              '${isPreviewEnabled ? '预览中' : '未预览'} · 已显示 ${profileState.loadedProfiles.length} 个',
+            ),
+          ),
+          const Divider(height: 1),
+          for (final profile in profileState.profiles)
+            SwitchListTile(
+              key: ValueKey('execution-control-${profile.id}'),
+              secondary: const Icon(Icons.play_circle_outline),
+              title: Text('${profile.name} 控件'),
+              subtitle: Text(
+                profileState.isProfileLoaded(profile.id)
+                    ? '显示该配置控件'
+                    : '隐藏该配置控件',
+              ),
+              value: profileState.isProfileLoaded(profile.id),
+              onChanged: canManageControls
+                  ? (value) => onVisibilityChanged(profile, value)
+                  : null,
+            ),
+        ],
       ),
     );
   }

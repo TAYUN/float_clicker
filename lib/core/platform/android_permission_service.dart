@@ -329,6 +329,42 @@ class AndroidPermissionService {
     await _invokeAndroidOnly('hideMultiPointOverlay');
   }
 
+  Future<void> showMultiProfileExecutionOverlay({
+    required MultiPointProfileState profileState,
+    GlobalOverlayAppearanceSettings appearanceSettings =
+        GlobalOverlayAppearanceSettings.defaults,
+  }) async {
+    await _invokeAndroidOnly(
+      'showMultiProfileExecutionOverlay',
+      arguments: {
+        ..._loadedProfileArguments(profileState),
+        ..._globalOverlayAppearanceArguments(appearanceSettings),
+      },
+    );
+  }
+
+  Future<void> updateMultiProfileExecutionOverlay({
+    required MultiPointProfileState profileState,
+    GlobalOverlayAppearanceSettings appearanceSettings =
+        GlobalOverlayAppearanceSettings.defaults,
+  }) async {
+    await _invokeAndroidOnly(
+      'updateMultiProfileExecutionOverlay',
+      arguments: {
+        ..._loadedProfileArguments(profileState),
+        ..._globalOverlayAppearanceArguments(appearanceSettings),
+      },
+      ignoreMissingPlugin: true,
+    );
+  }
+
+  Future<void> hideMultiProfileExecutionOverlay() async {
+    await _invokeAndroidOnly(
+      'hideMultiProfileExecutionOverlay',
+      ignoreMissingPlugin: true,
+    );
+  }
+
   Future<SinglePointOverlaySnapshot> getSinglePointOverlaySnapshot() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return SinglePointOverlaySnapshot.disabled;
@@ -579,6 +615,27 @@ class AndroidPermissionService {
     return {
       // 点位坐标传左上角，Android 侧负责窗口显示和后续点击中心点换算。
       'targets': targets.toJsonList(),
+    };
+  }
+
+  Map<String, Object?> _loadedProfileArguments(
+    MultiPointProfileState profileState,
+  ) {
+    final profilesById = {
+      for (final profile in profileState.profiles) profile.id: profile,
+    };
+    return {
+      // P7.2.1 只把已加载配置的轻量身份同步到原生悬浮控件，不传完整点位和点击参数。
+      'loadedProfiles': [
+        for (final loadedProfile in profileState.loadedProfiles)
+          if (loadedProfile.isVisible &&
+              profilesById.containsKey(loadedProfile.profileId))
+            {
+              'profileId': loadedProfile.profileId,
+              'displayName': profilesById[loadedProfile.profileId]!.name,
+              'order': loadedProfile.order,
+            },
+      ],
     };
   }
 

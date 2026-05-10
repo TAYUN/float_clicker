@@ -16,6 +16,7 @@ class MainActivity : FlutterActivity() {
     private lateinit var channel: MethodChannel
     private lateinit var singlePointOverlayManager: SinglePointOverlayManager
     private lateinit var multiPointOverlayManager: MultiPointOverlayManager
+    private lateinit var multiProfileExecutionOverlayManager: MultiProfileExecutionOverlayManager
     private val mainHandler = Handler(Looper.getMainLooper())
     private val overlayPermissionCheckRunnable = object : Runnable {
         override fun run() {
@@ -27,6 +28,16 @@ class MainActivity : FlutterActivity() {
             }
             if (::multiPointOverlayManager.isInitialized && multiPointOverlayManager.isShowing && !canDrawOverlays()) {
                 multiPointOverlayManager.handleOverlayPermissionRevoked()
+                if (::channel.isInitialized) {
+                    channel.invokeMethod("permissionSnapshotChanged", getPermissionSnapshot())
+                }
+            }
+            if (
+                ::multiProfileExecutionOverlayManager.isInitialized &&
+                multiProfileExecutionOverlayManager.isShowing &&
+                !canDrawOverlays()
+            ) {
+                multiProfileExecutionOverlayManager.handleOverlayPermissionRevoked()
                 if (::channel.isInitialized) {
                     channel.invokeMethod("permissionSnapshotChanged", getPermissionSnapshot())
                 }
@@ -78,6 +89,7 @@ class MainActivity : FlutterActivity() {
                 )
             },
         )
+        multiProfileExecutionOverlayManager = MultiProfileExecutionOverlayManager(this)
 
         // Flutter 侧只负责页面和配置；所有需要 Android 系统能力的操作都从这个通道进入。
         channel.setMethodCallHandler { call, result ->
@@ -110,6 +122,10 @@ class MainActivity : FlutterActivity() {
                     }
                     if (multiPointOverlayManager.isShowing) {
                         result.error("mode_conflict", "多点模式已开启，请先关闭多点模式。", null)
+                        return@setMethodCallHandler
+                    }
+                    if (multiProfileExecutionOverlayManager.isShowing) {
+                        result.error("mode_conflict", "多配置执行控件已开启，请先关闭执行控件。", null)
                         return@setMethodCallHandler
                     }
                     val shown = singlePointOverlayManager.show(singlePointOverlaySettingsFrom(call.arguments))
@@ -171,6 +187,7 @@ class MainActivity : FlutterActivity() {
                 "updateGlobalOverlayAppearanceSettings" -> {
                     singlePointOverlayManager.updateAppearanceSettings(overlayAppearanceSettingsFrom(call.arguments))
                     multiPointOverlayManager.updateAppearanceSettings(overlayAppearanceSettingsFrom(call.arguments))
+                    multiProfileExecutionOverlayManager.updateAppearanceSettings(overlayAppearanceSettingsFrom(call.arguments))
                     result.success(null)
                 }
                 "showMultiPointOverlay" -> {
@@ -180,6 +197,10 @@ class MainActivity : FlutterActivity() {
                     }
                     if (singlePointOverlayManager.isShowing) {
                         result.error("mode_conflict", "单点模式已开启，请先关闭单点模式。", null)
+                        return@setMethodCallHandler
+                    }
+                    if (multiProfileExecutionOverlayManager.isShowing) {
+                        result.error("mode_conflict", "多配置执行控件已开启，请先关闭执行控件。", null)
                         return@setMethodCallHandler
                     }
                     val shown = multiPointOverlayManager.show(multiPointOverlaySettingsFrom(call.arguments))
@@ -258,6 +279,41 @@ class MainActivity : FlutterActivity() {
                     multiPointOverlayManager.end()
                     result.success(null)
                 }
+                "showMultiProfileExecutionOverlay" -> {
+                    if (!canDrawOverlays()) {
+                        result.error("overlay_permission_denied", "悬浮窗权限未开启，请先在系统设置中允许显示在其他应用上层。", null)
+                        return@setMethodCallHandler
+                    }
+                    if (singlePointOverlayManager.isShowing || multiPointOverlayManager.isShowing) {
+                        // P7.2.1 只验证多配置执行控件展示；先和已有编辑悬浮层互斥，避免两个体系同时抢控制权。
+                        result.error("mode_conflict", "请先关闭当前悬浮模式，再开启多配置执行控件。", null)
+                        return@setMethodCallHandler
+                    }
+                    val shown = multiProfileExecutionOverlayManager.show(
+                        loadedProfiles = loadedMultiPointProfilesFrom(call.arguments),
+                        appearanceSettings = overlayAppearanceSettingsFrom(call.arguments),
+                    )
+                    if (shown) {
+                        result.success(null)
+                    } else {
+                        result.error("profile_empty", "没有可显示的已加载配置。", null)
+                    }
+                }
+                "updateMultiProfileExecutionOverlay" -> {
+                    val updated = multiProfileExecutionOverlayManager.update(
+                        loadedProfiles = loadedMultiPointProfilesFrom(call.arguments),
+                        appearanceSettings = overlayAppearanceSettingsFrom(call.arguments),
+                    )
+                    if (updated) {
+                        result.success(null)
+                    } else {
+                        result.error("overlay_window_unavailable", "多配置执行控件刷新失败，请关闭后重试。", null)
+                    }
+                }
+                "hideMultiProfileExecutionOverlay" -> {
+                    multiProfileExecutionOverlayManager.hide()
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -272,6 +328,9 @@ class MainActivity : FlutterActivity() {
         if (::multiPointOverlayManager.isInitialized) {
             multiPointOverlayManager.hide()
         }
+        if (::multiProfileExecutionOverlayManager.isInitialized) {
+            multiProfileExecutionOverlayManager.hide()
+        }
         mainHandler.removeCallbacks(overlayPermissionCheckRunnable)
         AccessibilityServiceStateBus.removeListener(accessibilityConnectionListener)
         super.onDestroy()
@@ -284,6 +343,9 @@ class MainActivity : FlutterActivity() {
         }
         if (::multiPointOverlayManager.isInitialized) {
             multiPointOverlayManager.handleConfigurationChanged()
+        }
+        if (::multiProfileExecutionOverlayManager.isInitialized) {
+            multiProfileExecutionOverlayManager.handleConfigurationChanged()
         }
     }
 
