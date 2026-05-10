@@ -534,6 +534,16 @@ void main() {
       ),
       ['默认配置', '新配置'],
     );
+    final firstProfile = loadedProfiles.first as Map<Object?, Object?>;
+    expect(firstProfile['settings'], {
+      'intervalMs': 500,
+      'repeatCount': 10,
+      'infiniteLoop': false,
+      'tapDurationMs': 50,
+    });
+    final targets = firstProfile['targets'] as List<Object?>;
+    expect(targets, hasLength(2));
+    expect((targets.first as Map<Object?, Object?>)['enabled'], isTrue);
     expect(nativeMultiProfileExecutionEnabled, isTrue);
 
     await tapVisibleText(tester, '关闭执行控件预览');

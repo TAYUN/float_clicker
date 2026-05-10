@@ -36,6 +36,8 @@ internal class MultiProfileExecutionOverlayManager(
     }
     private val buttonComponents = mutableMapOf<String, MultiProfileExecutionButtonComponent>()
     private val buttonPositions = mutableMapOf<String, OverlayPoint>()
+    private var taskStatus = MultiPointTaskStatus()
+    private var runningProfileId: String? = null
     private var profiles = emptyList<LoadedMultiPointProfileState>()
     private var appearanceSettings = OverlayAppearanceSettings()
     private var metrics = OverlayComponentMetrics(overlay, appearanceSettings)
@@ -67,9 +69,16 @@ internal class MultiProfileExecutionOverlayManager(
         loadedProfiles: List<LoadedMultiPointProfileState>,
         appearanceSettings: OverlayAppearanceSettings = this.appearanceSettings,
     ): Boolean {
+        val previousRunningProfileId = runningProfileId
         profiles = normalizedProfiles(loadedProfiles)
         this.appearanceSettings = appearanceSettings.normalized
         metrics = OverlayComponentMetrics(overlay, this.appearanceSettings)
+        if (
+            previousRunningProfileId != null &&
+            profiles.none { it.profileId == previousRunningProfileId }
+        ) {
+            endActiveTask("正在执行的配置已隐藏，任务已结束")
+        }
 
         if (!isShowing) {
             return true
@@ -82,6 +91,7 @@ internal class MultiProfileExecutionOverlayManager(
     }
 
     fun hide() {
+        endActiveTask()
         isShowing = false
         mainHandler.removeCallbacks(displayBoundsRefreshRunnable)
         buttonComponents.values.forEach { component -> component.remove() }
@@ -114,6 +124,14 @@ internal class MultiProfileExecutionOverlayManager(
         Toast.makeText(context.applicationContext, "悬浮窗权限已关闭，多配置执行控件已关闭", Toast.LENGTH_SHORT).show()
     }
 
+    fun handleAccessibilityServiceDisconnected() {
+        if (taskStatus.taskRunState == TaskRunState.IDLE) {
+            return
+        }
+
+        endActiveTask("无障碍服务已断开，当前配置任务已结束")
+    }
+
     private fun refreshButtons(): Boolean {
         val profileIds = profiles.map { it.profileId }.toSet()
         val removedIds = buttonComponents.keys - profileIds
@@ -131,17 +149,111 @@ internal class MultiProfileExecutionOverlayManager(
                     overlayWindow = overlay,
                     onPositionChanged = { point -> buttonPositions[profile.profileId] = point },
                     onClick = {
-                        // P7.2.1 只验证多控件悬浮展示；真实绑定 profile 执行留到 P7.2.2。
-                        Toast.makeText(context.applicationContext, "执行功能将在下一阶段接入", Toast.LENGTH_SHORT).show()
+                        handleButtonClick(profile.profileId)
                     },
                 )
             }
-            component.show(profile = profile, position = position, metrics = metrics)
+            component.show(
+                profile = profile,
+                position = position,
+                metrics = metrics,
+                isRunning = runningProfileId == profile.profileId,
+                isBlocked = runningProfileId != null && runningProfileId != profile.profileId,
+            )
             if (!component.isShowing) {
                 return false
             }
         }
         return true
+    }
+
+    private fun handleButtonClick(profileId: String) {
+        val activeProfileId = runningProfileId
+        if (activeProfileId == profileId) {
+            endActiveTask("配置任务已结束")
+            return
+        }
+        if (activeProfileId != null) {
+            Toast.makeText(context.applicationContext, "已有配置任务正在执行，请先停止当前任务", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val profile = profiles.firstOrNull { it.profileId == profileId }
+        if (profile == null) {
+            Toast.makeText(context.applicationContext, "配置已不存在，请刷新执行控件", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // 先登记 runningProfileId，因为调度器 start() 会同步回调 RUNNING 状态。
+        runningProfileId = profile.profileId
+        val result = MultiPointClickScheduler.start(
+            request = profile.toClickTaskRequest(),
+            targetPositionProvider = AutomationTargetPositionProvider { targetId ->
+                targetCenterOnScreen(profile, targetId)
+            },
+            onStatusChanged = ::handleSchedulerStatusChanged,
+        )
+        if (result == MultiPointClickStartResult.STARTED) {
+            refreshButtons()
+            return
+        }
+
+        runningProfileId = null
+        taskStatus = MultiPointTaskStatus()
+        refreshButtons()
+        showStartFailure(result)
+    }
+
+    private fun endActiveTask(message: String? = null) {
+        val hadActiveTask = runningProfileId != null || taskStatus.taskRunState != TaskRunState.IDLE
+        if (hadActiveTask) {
+            MultiPointClickScheduler.end()
+        }
+        if (taskStatus.taskRunState != TaskRunState.IDLE || runningProfileId != null) {
+            handleSchedulerStatusChanged(MultiPointTaskStatus())
+        } else {
+            runningProfileId = null
+        }
+        if (message != null && hadActiveTask) {
+            Toast.makeText(context.applicationContext, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun handleSchedulerStatusChanged(status: MultiPointTaskStatus) {
+        taskStatus = if (isShowing) status else MultiPointTaskStatus()
+        if (taskStatus.taskRunState == TaskRunState.IDLE) {
+            runningProfileId = null
+        }
+        if (isShowing && !refreshButtons()) {
+            hide()
+        }
+    }
+
+    private fun showStartFailure(result: MultiPointClickStartResult) {
+        val message = when (result) {
+            MultiPointClickStartResult.NO_ENABLED_TARGETS -> "请至少启用 1 个点位后再执行"
+            MultiPointClickStartResult.ACCESSIBILITY_SERVICE_UNAVAILABLE -> "无障碍服务未连接，无法执行配置任务"
+            MultiPointClickStartResult.INVALID_TASK_STATE -> "已有多点任务正在执行，请先结束当前任务"
+            MultiPointClickStartResult.STARTED -> return
+        }
+        Toast.makeText(context.applicationContext, message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun targetCenterOnScreen(
+        profile: LoadedMultiPointProfileState,
+        targetId: String,
+    ): AutomationTargetPosition? {
+        val target = profile.targets.firstOrNull { it.id == targetId } ?: return null
+        val position = overlay.coercePositionPx(
+            OverlayPoint(target.x, target.y),
+            widthPx = metrics.targetSizePx,
+            heightPx = metrics.targetSizePx,
+        )
+        // profile 保存的是 Flutter 逻辑像素，dispatchGesture 需要真实屏幕像素。
+        return AutomationTargetPosition(
+            x = overlay.dp(position.x) + metrics.targetSizePx / 2f,
+            y = overlay.dp(position.y) + metrics.targetSizePx / 2f,
+        )
     }
 
     private fun coercedPositionFor(

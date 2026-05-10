@@ -58,6 +58,9 @@ class MainActivity : FlutterActivity() {
         if (!isConnected && ::multiPointOverlayManager.isInitialized) {
             multiPointOverlayManager.handleAccessibilityServiceDisconnected()
         }
+        if (!isConnected && ::multiProfileExecutionOverlayManager.isInitialized) {
+            multiProfileExecutionOverlayManager.handleAccessibilityServiceDisconnected()
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

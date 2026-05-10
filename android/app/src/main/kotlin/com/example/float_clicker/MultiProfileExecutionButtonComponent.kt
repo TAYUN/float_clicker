@@ -29,6 +29,8 @@ internal class MultiProfileExecutionButtonComponent(
         profile: LoadedMultiPointProfileState,
         position: OverlayPoint,
         metrics: OverlayComponentMetrics,
+        isRunning: Boolean,
+        isBlocked: Boolean,
     ) {
         this.metrics = metrics
         if (view == null) {
@@ -53,7 +55,7 @@ internal class MultiProfileExecutionButtonComponent(
             updateMetrics(metrics)
         }
 
-        updateProfile(profile)
+        updateProfile(profile, isRunning, isBlocked)
         overlayWindow.moveTo(view, params, position)
     }
 
@@ -74,10 +76,20 @@ internal class MultiProfileExecutionButtonComponent(
         overlayWindow.updateViewLayout(button, buttonParams)
     }
 
-    private fun updateProfile(profile: LoadedMultiPointProfileState) {
+    private fun updateProfile(
+        profile: LoadedMultiPointProfileState,
+        isRunning: Boolean,
+        isBlocked: Boolean,
+    ) {
         view?.apply {
-            text = profile.displayName
-            contentDescription = "配置执行控件预览：${profile.displayName}"
+            text = if (isRunning) "停止 ${profile.displayName}" else profile.displayName
+            alpha = if (isBlocked) 0.62f else 1f
+            background = buttonBackground(isRunning)
+            contentDescription = if (isRunning) {
+                "停止配置任务：${profile.displayName}"
+            } else {
+                "执行配置任务：${profile.displayName}"
+            }
         }
     }
 
@@ -96,18 +108,21 @@ internal class MultiProfileExecutionButtonComponent(
                 overlayWindow.dp(12),
                 0,
             )
-            background = buttonBackground()
+            background = buttonBackground(isRunning = false)
             elevation = overlayWindow.dp(8).toFloat()
             isClickable = true
         }
     }
 
-    private fun buttonBackground(): GradientDrawable {
+    private fun buttonBackground(isRunning: Boolean = false): GradientDrawable {
         return GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = overlayWindow.dp(16).toFloat()
-            setColor(OverlayColors.PANEL)
-            setStroke(metrics.actionButtonStrokePx, OverlayColors.ACCENT)
+            setColor(if (isRunning) OverlayColors.DANGER_SOFT else OverlayColors.PANEL)
+            setStroke(
+                metrics.actionButtonStrokePx,
+                if (isRunning) OverlayColors.DANGER else OverlayColors.ACCENT,
+            )
         }
     }
 

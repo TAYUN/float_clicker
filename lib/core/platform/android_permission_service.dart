@@ -625,15 +625,21 @@ class AndroidPermissionService {
       for (final profile in profileState.profiles) profile.id: profile,
     };
     return {
-      // P7.2.1 只把已加载配置的轻量身份同步到原生悬浮控件，不传完整点位和点击参数。
+      // P7.2.2 开始执行控件会直接启动绑定 profile；这里传保存后的完整快照，
+      // 避免原生侧回读当前编辑页状态而执行错配置。
       'loadedProfiles': [
         for (final loadedProfile in profileState.loadedProfiles)
           if (loadedProfile.isVisible &&
-              profilesById.containsKey(loadedProfile.profileId))
+              profilesById.containsKey(loadedProfile.profileId) &&
+              profilesById[loadedProfile.profileId]!.targets.hasEnabledTarget)
             {
               'profileId': loadedProfile.profileId,
               'displayName': profilesById[loadedProfile.profileId]!.name,
               'order': loadedProfile.order,
+              'settings': profilesById[loadedProfile.profileId]!.settings
+                  .toJson(),
+              'targets': profilesById[loadedProfile.profileId]!.targets
+                  .toJsonList(),
             },
       ],
     };

@@ -143,19 +143,23 @@ class _MultiPointPageState extends State<MultiPointPage>
     });
   }
 
-  Future<void> _saveConfiguration(MultiPointConfiguration configuration) async {
+  Future<MultiPointProfileState?> _saveConfiguration(
+    MultiPointConfiguration configuration,
+  ) async {
     await _settingsStore.saveConfiguration(configuration);
     if (!mounted) {
-      return;
+      return null;
     }
 
+    final nextProfileState = _profileStateWithConfiguration(
+      _profileState,
+      configuration,
+    );
     setState(() {
       _configuration = configuration;
-      _profileState = _profileStateWithConfiguration(
-        _profileState,
-        configuration,
-      );
+      _profileState = nextProfileState;
     });
+    return nextProfileState;
   }
 
   Future<void> _openProfileManager() async {
@@ -279,9 +283,12 @@ class _MultiPointPageState extends State<MultiPointPage>
       overlayUiSettings: _configuration.overlayUiSettings,
       targets: targets,
     );
-    await _saveConfiguration(nextConfiguration);
+    final nextProfileState = await _saveConfiguration(nextConfiguration);
     if (_isModeEnabled) {
       await _permissionService.updateMultiPointTargets(targets);
+    }
+    if (nextProfileState != null) {
+      await _refreshExecutionPreviewOverlay(nextProfileState);
     }
   }
 
@@ -295,7 +302,7 @@ class _MultiPointPageState extends State<MultiPointPage>
       return;
     }
 
-    await _saveConfiguration(result.configuration);
+    final nextProfileState = await _saveConfiguration(result.configuration);
     if (_isModeEnabled) {
       await _permissionService.updateMultiPointSettings(
         result.configuration.settings,
@@ -303,6 +310,9 @@ class _MultiPointPageState extends State<MultiPointPage>
       await _permissionService.updateMultiPointOverlayUiSettings(
         result.configuration.overlayUiSettings,
       );
+    }
+    if (nextProfileState != null) {
+      await _refreshExecutionPreviewOverlay(nextProfileState);
     }
   }
 
@@ -359,9 +369,12 @@ class _MultiPointPageState extends State<MultiPointPage>
         return;
       }
 
-      await _saveConfiguration(_configuration);
+      final nextProfileState = await _saveConfiguration(_configuration);
+      if (!mounted || nextProfileState == null) {
+        return;
+      }
       await _permissionService.showMultiProfileExecutionOverlay(
-        profileState: _profileState,
+        profileState: nextProfileState,
         appearanceSettings: _appearanceSettings,
       );
       if (!mounted) {
@@ -372,6 +385,23 @@ class _MultiPointPageState extends State<MultiPointPage>
       });
     } on PlatformException catch (error) {
       _showPlatformError(error, fallback: '无法开启执行控件预览');
+    }
+  }
+
+  Future<void> _refreshExecutionPreviewOverlay(
+    MultiPointProfileState profileState,
+  ) async {
+    if (!_isExecutionPreviewEnabled) {
+      return;
+    }
+
+    try {
+      await _permissionService.updateMultiProfileExecutionOverlay(
+        profileState: profileState,
+        appearanceSettings: _appearanceSettings,
+      );
+    } on PlatformException catch (error) {
+      _showPlatformError(error, fallback: '无法刷新执行控件预览');
     }
   }
 
