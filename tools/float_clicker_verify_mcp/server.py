@@ -159,13 +159,67 @@ def _parse_install(completed: subprocess.CompletedProcess[str], duration_ms: flo
     }
 
 
+def _adb_getprop(serial: str, prop: str) -> str | None:
+    try:
+        completed = subprocess.run(
+            f'adb -s "{serial}" shell getprop {prop}',
+            cwd=REPO_ROOT,
+            shell=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            timeout=10,
+        )
+    except subprocess.TimeoutExpired:
+        return None
+    if completed.returncode != 0:
+        return None
+    value = completed.stdout.strip()
+    return value or None
+
+
+def _enrich_adb_device(device: dict[str, Any]) -> dict[str, Any]:
+    if device.get("state") != "device":
+        return device
+
+    serial = str(device["serial"])
+    properties = {
+        "manufacturer": _adb_getprop(serial, "ro.product.manufacturer"),
+        "brand": _adb_getprop(serial, "ro.product.brand"),
+        "model": _adb_getprop(serial, "ro.product.model"),
+        "device": _adb_getprop(serial, "ro.product.device"),
+        "androidRelease": _adb_getprop(serial, "ro.build.version.release"),
+        "sdk": _adb_getprop(serial, "ro.build.version.sdk"),
+    }
+    enriched = device | properties
+
+    # displayName 给 AI/用户快速识别真机；属性获取失败时仍保留 serial 可用。
+    name_parts = [
+        part
+        for part in [
+            properties["manufacturer"],
+            properties["brand"],
+            properties["model"],
+        ]
+        if part
+    ]
+    display_name = " ".join(dict.fromkeys(name_parts)) or serial
+    if properties["androidRelease"]:
+        display_name = f"{display_name} Android {properties['androidRelease']}"
+    if properties["sdk"]:
+        display_name = f"{display_name} (SDK {properties['sdk']})"
+    enriched["displayName"] = f"{display_name} [{serial}]"
+    return enriched
+
+
 def _parse_adb_devices(completed: subprocess.CompletedProcess[str], duration_ms: float) -> dict[str, Any]:
     devices = []
     for line in completed.stdout.splitlines()[1:]:
         parts = line.split()
         if len(parts) < 2:
             continue
-        devices.append({"serial": parts[0], "state": parts[1]})
+        devices.append(_enrich_adb_device({"serial": parts[0], "state": parts[1]}))
     online_devices = [device for device in devices if device["state"] == "device"]
     success = completed.returncode == 0 and bool(online_devices)
     return {

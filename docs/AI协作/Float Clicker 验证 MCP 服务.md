@@ -42,7 +42,7 @@ tools/float_clicker_verify_mcp/README.md
 - `flutter_analyze`：运行 `flutter analyze`。
 - `flutter_test`：运行 `flutter test`，解析通过测试数量。
 - `flutter_build_debug_apk`：运行 `flutter build apk --debug`。
-- `adb_devices`：运行 `adb devices`，要求至少有 1 台在线设备。
+- `adb_devices`：运行 `adb devices`，要求至少有 1 台在线设备，并返回在线设备的品牌、型号和 Android 版本。
 - `adb_install_debug_apk`：安装 `build\app\outputs\flutter-apk\app-debug.apk`。
 - `git_diff_check`：运行 `git diff --check`。
 - `verify_debug_pipeline`：按顺序执行可选 format、analyze、test、build、可选 install 和可选 diff check。
@@ -80,6 +80,28 @@ AI 应优先调用 MCP 工具，而不是手写 shell 命令。
       "exitCode": 0,
       "testCount": 55,
       "summary": "55 个测试通过"
+    }
+  ]
+}
+```
+
+`adb_devices` 会在 `adb devices` 的 serial 基础上补充设备识别字段，方便 AI 判断当前连接的是哪台真机：
+
+```json
+{
+  "success": true,
+  "summary": "检测到 1 台在线设备",
+  "onlineDevices": [
+    {
+      "serial": "10.244.122.130:41035",
+      "state": "device",
+      "manufacturer": "OPPO",
+      "brand": "OPPO",
+      "model": "示例型号",
+      "device": "示例设备代号",
+      "androidRelease": "16",
+      "sdk": "36",
+      "displayName": "OPPO 示例型号 Android 16 (SDK 36) [10.244.122.130:41035]"
     }
   ]
 }

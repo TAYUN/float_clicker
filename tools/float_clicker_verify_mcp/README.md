@@ -8,7 +8,7 @@
 - `flutter_analyze`：执行 `flutter analyze`。
 - `flutter_test`：执行 `flutter test`，解析通过测试数量。
 - `flutter_build_debug_apk`：执行 `flutter build apk --debug`。
-- `adb_devices`：执行 `adb devices`，要求至少有 1 台在线设备。
+- `adb_devices`：执行 `adb devices`，要求至少有 1 台在线设备，并返回在线设备的品牌、型号和 Android 版本。
 - `adb_install_debug_apk`：执行 `adb install -r build\app\outputs\flutter-apk\app-debug.apk`。
 - `git_diff_check`：执行 `git diff --check`。
 - `verify_debug_pipeline`：按顺序执行可选 format、analyze、test、debug apk 构建、可选安装和可选 diff check。
@@ -55,6 +55,28 @@ args = ["D:\\code-my\\float_clicker\\float_clicker\\tools\\float_clicker_verify_
 ```
 
 失败时会保留命令、退出码、摘要、错误分类、stdout/stderr 尾部和完整日志路径，方便 AI 直接判断下一步。
+
+`adb_devices` 会额外返回设备识别信息，方便区分多台真机：
+
+```json
+{
+  "success": true,
+  "summary": "检测到 1 台在线设备",
+  "onlineDevices": [
+    {
+      "serial": "10.244.122.130:41035",
+      "state": "device",
+      "manufacturer": "OPPO",
+      "brand": "OPPO",
+      "model": "示例型号",
+      "device": "示例设备代号",
+      "androidRelease": "16",
+      "sdk": "36",
+      "displayName": "OPPO 示例型号 Android 16 (SDK 36) [10.244.122.130:41035]"
+    }
+  ]
+}
+```
 
 常见 `errorCode`：
 
