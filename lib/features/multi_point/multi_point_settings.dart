@@ -753,14 +753,43 @@ class MultiPointProfileState {
     for (final loadedProfile
         in loadedProfiles ?? const <LoadedMultiPointProfile>[]) {
       if (!profileIds.contains(loadedProfile.profileId) ||
-          seenIds.contains(loadedProfile.profileId) ||
-          !loadedProfile.isVisible) {
+          seenIds.contains(loadedProfile.profileId)) {
         continue;
       }
       seenIds.add(loadedProfile.profileId);
-      result.add(
-        loadedProfile.copyWith(order: result.length + 1, isVisible: true),
-      );
+      // 隐藏的执行控件条目需要继续保留按钮坐标；重新显示同一 profile 时才能恢复位置。
+      result.add(loadedProfile);
+    }
+
+    final hasVisibleProfile = result.any((loadedProfile) {
+      return loadedProfile.isVisible;
+    });
+    if (!hasVisibleProfile) {
+      final activeProfileIndex = result.indexWhere((loadedProfile) {
+        return loadedProfile.profileId == normalizedActiveProfileId;
+      });
+      if (activeProfileIndex >= 0) {
+        final activeProfile = result[activeProfileIndex];
+        result[activeProfileIndex] = activeProfile.copyWith(isVisible: true);
+      } else {
+        result.add(
+          LoadedMultiPointProfile(
+            profileId: normalizedActiveProfileId,
+            order: 1,
+            isVisible: true,
+          ),
+        );
+      }
+    }
+
+    var nextVisibleOrder = 1;
+    for (var index = 0; index < result.length; index += 1) {
+      final loadedProfile = result[index];
+      if (!loadedProfile.isVisible) {
+        continue;
+      }
+      result[index] = loadedProfile.copyWith(order: nextVisibleOrder);
+      nextVisibleOrder += 1;
     }
 
     if (result.isEmpty) {

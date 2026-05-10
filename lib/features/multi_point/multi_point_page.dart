@@ -427,23 +427,30 @@ class _MultiPointPageState extends State<MultiPointPage>
     if (visible == isCurrentlyVisible) {
       return;
     }
-    if (!visible && currentLoadedProfiles.length <= 1) {
+    if (!visible && _profileState.loadedProfileIds.length <= 1) {
       _showMessage('至少需要保留 1 个执行控件。');
       return;
     }
 
-    final nextLoadedProfiles = visible
-        ? [
-            ...currentLoadedProfiles,
-            LoadedMultiPointProfile(
-              profileId: profile.id,
-              order: currentLoadedProfiles.length + 1,
-              isVisible: true,
-            ),
-          ]
-        : currentLoadedProfiles
-              .where((loadedProfile) => loadedProfile.profileId != profile.id)
-              .toList(growable: false);
+    final hasExistingLoadedProfile = currentLoadedProfiles.any(
+      (loadedProfile) => loadedProfile.profileId == profile.id,
+    );
+    final nextLoadedProfiles = [
+      for (final loadedProfile in currentLoadedProfiles)
+        if (loadedProfile.profileId == profile.id)
+          loadedProfile.copyWith(
+            isVisible: visible,
+            order: visible ? _profileState.loadedProfileIds.length + 1 : null,
+          )
+        else
+          loadedProfile,
+      if (visible && !hasExistingLoadedProfile)
+        LoadedMultiPointProfile(
+          profileId: profile.id,
+          order: _profileState.loadedProfileIds.length + 1,
+          isVisible: true,
+        ),
+    ];
     final nextProfileState = await _settingsStore.saveProfileState(
       _profileState.copyWith(loadedProfiles: nextLoadedProfiles),
     );
@@ -831,7 +838,7 @@ class _ExecutionPreviewSection extends StatelessWidget {
             leading: const Icon(Icons.dashboard_customize_outlined),
             title: const Text('执行控件'),
             subtitle: Text(
-              '${isPreviewEnabled ? '预览中' : '未预览'} · 已显示 ${profileState.loadedProfiles.length} 个',
+              '${isPreviewEnabled ? '预览中' : '未预览'} · 已显示 ${profileState.loadedProfileIds.length} 个',
             ),
           ),
           const Divider(height: 1),

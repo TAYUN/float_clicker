@@ -29,6 +29,7 @@ class _MultiPointProfilePageState extends State<MultiPointProfilePage> {
     final activeProfile = _profiles.firstWhere(
       (profile) => profile.id == _activeProfileId,
     );
+    final visibleLoadedProfiles = _visibleLoadedProfiles;
 
     return Scaffold(
       appBar: AppBar(
@@ -44,7 +45,7 @@ class _MultiPointProfilePageState extends State<MultiPointProfilePage> {
                 leading: const Icon(Icons.playlist_add_check),
                 title: Text('当前配置：${activeProfile.name}'),
                 subtitle: Text(
-                  '共 ${_profiles.length} 套配置，已加载 ${_loadedProfiles.length} 套',
+                  '共 ${_profiles.length} 套配置，已加载 ${visibleLoadedProfiles.length} 套',
                 ),
               ),
             ),
@@ -55,7 +56,7 @@ class _MultiPointProfilePageState extends State<MultiPointProfilePage> {
                 isActive: profile.id == _activeProfileId,
                 isLoaded: _isProfileLoaded(profile.id),
                 canDelete: _profiles.length > 1,
-                canUnload: _loadedProfiles.length > 1,
+                canUnload: visibleLoadedProfiles.length > 1,
                 onSelect: () => _selectProfile(profile.id),
                 onLoadedChanged: (loaded) =>
                     _setProfileLoaded(profile: profile, loaded: loaded),
@@ -118,7 +119,7 @@ class _MultiPointProfilePageState extends State<MultiPointProfilePage> {
       _showMessage('请至少启用 1 个点位后再加载到执行区。');
       return;
     }
-    if (!loaded && _loadedProfiles.length <= 1) {
+    if (!loaded && _visibleLoadedProfiles.length <= 1) {
       _showMessage('至少需要保留 1 套已加载配置。');
       return;
     }
@@ -126,19 +127,32 @@ class _MultiPointProfilePageState extends State<MultiPointProfilePage> {
     setState(() {
       if (loaded) {
         if (!_isProfileLoaded(profile.id)) {
+          final hasExistingLoadedProfile = _loadedProfiles.any(
+            (loadedProfile) => loadedProfile.profileId == profile.id,
+          );
           _loadedProfiles = [
-            ..._loadedProfiles,
-            LoadedMultiPointProfile(
-              profileId: profile.id,
-              order: _loadedProfiles.length + 1,
-              isVisible: true,
-            ),
+            for (final loadedProfile in _loadedProfiles)
+              loadedProfile.profileId == profile.id
+                  ? loadedProfile.copyWith(
+                      isVisible: true,
+                      order: _visibleLoadedProfiles.length + 1,
+                    )
+                  : loadedProfile,
+            if (!hasExistingLoadedProfile)
+              LoadedMultiPointProfile(
+                profileId: profile.id,
+                order: _visibleLoadedProfiles.length + 1,
+                isVisible: true,
+              ),
           ];
         }
       } else {
-        _loadedProfiles = _loadedProfiles
-            .where((loadedProfile) => loadedProfile.profileId != profile.id)
-            .toList(growable: false);
+        _loadedProfiles = [
+          for (final loadedProfile in _loadedProfiles)
+            loadedProfile.profileId == profile.id
+                ? loadedProfile.copyWith(isVisible: false)
+                : loadedProfile,
+        ];
       }
       _normalizeLoadedProfiles();
     });
@@ -229,8 +243,15 @@ class _MultiPointProfilePageState extends State<MultiPointProfilePage> {
 
   bool _isProfileLoaded(String profileId) {
     return _loadedProfiles.any(
-      (loadedProfile) => loadedProfile.profileId == profileId,
+      (loadedProfile) =>
+          loadedProfile.profileId == profileId && loadedProfile.isVisible,
     );
+  }
+
+  List<LoadedMultiPointProfile> get _visibleLoadedProfiles {
+    return _loadedProfiles
+        .where((loadedProfile) => loadedProfile.isVisible)
+        .toList(growable: false);
   }
 
   void _normalizeLoadedProfiles() {

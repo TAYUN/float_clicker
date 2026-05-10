@@ -314,6 +314,40 @@ void main() {
     expect(state.loadedProfiles.last.buttonPositionY, 460);
   });
 
+  test('hidden loaded profile keeps button position for reload', () async {
+    final first = MultiPointProfile.defaultProfile().copyWith(id: 'first');
+    final second = MultiPointProfile.defaultProfile().copyWith(id: 'second');
+
+    final state = await store.saveProfileState(
+      MultiPointProfileState(
+        profiles: [first, second],
+        activeProfileId: first.id,
+        loadedProfiles: const [
+          LoadedMultiPointProfile(
+            profileId: 'first',
+            order: 1,
+            isVisible: true,
+          ),
+          LoadedMultiPointProfile(
+            profileId: 'second',
+            order: 2,
+            isVisible: false,
+            buttonPositionX: 333,
+            buttonPositionY: 444,
+          ),
+        ],
+      ),
+    );
+
+    expect(state.loadedProfileIds, ['first']);
+    final hiddenProfile = state.loadedProfiles.firstWhere(
+      (loadedProfile) => loadedProfile.profileId == 'second',
+    );
+    expect(hiddenProfile.isVisible, isFalse);
+    expect(hiddenProfile.buttonPositionX, 333);
+    expect(hiddenProfile.buttonPositionY, 444);
+  });
+
   test('bad loaded profiles json falls back to active profile', () async {
     SharedPreferences.setMockInitialValues({
       MultiPointSettingsStore.loadedProfileIdsJsonKey: '{bad-json',

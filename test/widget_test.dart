@@ -639,6 +639,68 @@ void main() {
     expect(profile['buttonPositionY'], 288);
   });
 
+  testWidgets(
+    'Multi point execution preview keeps position after control hide and show',
+    (tester) async {
+      await tester.pumpWidget(const FloatClickerApp());
+
+      await tapVisibleText(tester, '多点模式');
+      await tester.tap(find.text('默认配置'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('新建配置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('配置操作').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('加载到执行区'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('完成'));
+      await tester.pumpAndSettle();
+
+      await tapVisibleText(tester, '开启执行控件预览');
+      final showCall = methodCalls.lastWhere(
+        (call) => call.method == 'showMultiProfileExecutionOverlay',
+      );
+      final showArguments = showCall.arguments as Map<Object?, Object?>;
+      final shownProfiles = showArguments['loadedProfiles'] as List<Object?>;
+      final newProfile = shownProfiles.cast<Map<Object?, Object?>>().firstWhere(
+        (profile) => profile['displayName'] == '新配置',
+      );
+      final newProfileId = newProfile['profileId'] as String;
+
+      await sendLoadedProfileButtonPosition(
+        profileId: newProfileId,
+        x: 222,
+        y: 333,
+      );
+      await tester.pumpAndSettle();
+      methodCalls.clear();
+
+      await tapVisibleText(tester, '新配置 控件');
+      var updateCall = methodCalls.lastWhere(
+        (call) => call.method == 'updateMultiProfileExecutionOverlay',
+      );
+      var updateArguments = updateCall.arguments as Map<Object?, Object?>;
+      var loadedProfiles = updateArguments['loadedProfiles'] as List<Object?>;
+      expect(loadedProfiles, hasLength(1));
+
+      methodCalls.clear();
+      await tapVisibleText(tester, '新配置 控件');
+
+      updateCall = methodCalls.lastWhere(
+        (call) => call.method == 'updateMultiProfileExecutionOverlay',
+      );
+      updateArguments = updateCall.arguments as Map<Object?, Object?>;
+      loadedProfiles = updateArguments['loadedProfiles'] as List<Object?>;
+      final restoredProfile = loadedProfiles
+          .cast<Map<Object?, Object?>>()
+          .firstWhere((profile) => profile['profileId'] == newProfileId);
+
+      expect(restoredProfile['buttonPositionX'], 222);
+      expect(restoredProfile['buttonPositionY'], 333);
+    },
+  );
+
   testWidgets('Multi point target edits persist after leaving page', (
     tester,
   ) async {
