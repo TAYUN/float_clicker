@@ -20,3 +20,9 @@ agent_order = ["explorer", "pm", "builder", "tester", "reporter"]
 current_focus = "P7: 多配置悬浮执行区"
 protected_area = "单点模式已基本稳定，修改多点时必须保护单点回归"
 deferred_scope = "高级连招、并行任务、贴边展开和复杂执行模式按后续小阶段推进"
+
+[mcp_servers.float_clicker_verify]
+command = "python"
+# 使用项目根目录作为工作目录，避免脚本内相对路径依赖当前会话启动位置。
+cwd = "D:\\code-my\\float_clicker\\float_clicker"
+args = ["tools/float_clicker_verify_mcp/server.py"]

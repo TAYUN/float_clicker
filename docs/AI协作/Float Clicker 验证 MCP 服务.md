@@ -49,7 +49,23 @@ tools/float_clicker_verify_mcp/README.md
 
 ## 4. Codex 配置示例
 
-在 Codex MCP 配置中添加：
+项目级配置已经写入：
+
+```text
+.codex/config.toml
+```
+
+内容为：
+
+```toml
+[mcp_servers.float_clicker_verify]
+command = "python"
+# 使用项目根目录作为工作目录，避免脚本内相对路径依赖当前会话启动位置。
+cwd = "D:\\code-my\\float_clicker\\float_clicker"
+args = ["tools/float_clicker_verify_mcp/server.py"]
+```
+
+如果在其他 Codex 环境中需要手动配置，也可以使用绝对路径形式：
 
 ```toml
 [mcp_servers.float_clicker_verify]
