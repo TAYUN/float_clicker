@@ -138,6 +138,52 @@ class MultiPointOverlaySnapshot {
   );
 }
 
+class MultiProfileExecutionOverlaySnapshot {
+  const MultiProfileExecutionOverlaySnapshot({
+    required this.isShowing,
+    required this.isPanelCollapsed,
+    this.launcherPosition,
+    this.buttonPositions = const {},
+  });
+
+  final bool isShowing;
+  final bool isPanelCollapsed;
+  final MultiProfileExecutionLauncherPosition? launcherPosition;
+  final Map<String, LoadedProfileButtonPositionChange> buttonPositions;
+
+  factory MultiProfileExecutionOverlaySnapshot.fromMap(
+    Map<Object?, Object?> map,
+  ) {
+    final rawButtonPositions = map['buttonPositions'];
+    final buttonPositions = <String, LoadedProfileButtonPositionChange>{};
+    if (rawButtonPositions is List<Object?>) {
+      for (final item in rawButtonPositions) {
+        if (item is! Map<Object?, Object?>) {
+          continue;
+        }
+        final position = LoadedProfileButtonPositionChange.fromMap(item);
+        if (position.profileId.isNotEmpty) {
+          buttonPositions[position.profileId] = position;
+        }
+      }
+    }
+
+    return MultiProfileExecutionOverlaySnapshot(
+      isShowing: map['isShowing'] == true,
+      isPanelCollapsed: map['isPanelCollapsed'] == true,
+      launcherPosition: map['launcherPositionX'] is num
+          ? MultiProfileExecutionLauncherPosition.fromMap(map)
+          : null,
+      buttonPositions: buttonPositions,
+    );
+  }
+
+  static const disabled = MultiProfileExecutionOverlaySnapshot(
+    isShowing: false,
+    isPanelCollapsed: false,
+  );
+}
+
 class MultiPointTargetPositionChange {
   const MultiPointTargetPositionChange({
     required this.id,
@@ -444,6 +490,22 @@ class AndroidPermissionService {
       return MultiPointOverlaySnapshot.fromMap(result ?? const {});
     } on MissingPluginException {
       return MultiPointOverlaySnapshot.disabled;
+    }
+  }
+
+  Future<MultiProfileExecutionOverlaySnapshot>
+  getMultiProfileExecutionOverlaySnapshot() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      return MultiProfileExecutionOverlaySnapshot.disabled;
+    }
+
+    try {
+      final result = await _channel.invokeMapMethod<Object?, Object?>(
+        'getMultiProfileExecutionOverlaySnapshot',
+      );
+      return MultiProfileExecutionOverlaySnapshot.fromMap(result ?? const {});
+    } on MissingPluginException {
+      return MultiProfileExecutionOverlaySnapshot.disabled;
     }
   }
 

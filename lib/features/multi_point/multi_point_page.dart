@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -82,9 +80,6 @@ class _MultiPointPageState extends State<MultiPointPage>
     _permissionService.setLoadedProfileButtonPositionChanged(null);
     _permissionService.setMultiProfileExecutionPanelStateChanged(null);
     _permissionService.setMultiProfileExecutionLauncherPositionChanged(null);
-    if (_isExecutionPreviewEnabled) {
-      unawaited(_permissionService.hideMultiProfileExecutionOverlay());
-    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -105,6 +100,8 @@ class _MultiPointPageState extends State<MultiPointPage>
     final appearanceSettings = await _appearanceStore.load();
     final refreshResult = await _permissionService
         .refreshMultiPointStateWithAccessibilityRetry();
+    final executionSnapshot = await _permissionService
+        .getMultiProfileExecutionOverlaySnapshot();
     if (!mounted) {
       return;
     }
@@ -113,19 +110,32 @@ class _MultiPointPageState extends State<MultiPointPage>
       refreshResult.overlaySnapshot,
       fallback: configuration,
     );
-    final snapshotProfileState = _profileStateWithConfiguration(
-      profileState,
-      snapshotConfiguration,
+    final snapshotProfileState = _syncProfileStateWithExecutionSnapshot(
+      _profileStateWithConfiguration(profileState, snapshotConfiguration),
+      executionSnapshot,
     );
+    final syncedLauncherPosition =
+        executionSnapshot.launcherPosition ?? executionLauncherPosition;
+    await _persistExecutionSnapshotPositions(
+      snapshotProfileState,
+      syncedLauncherPosition,
+      executionSnapshot,
+    );
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _appearanceSettings = appearanceSettings;
       _configuration = snapshotConfiguration;
       _profileState = snapshotProfileState;
-      _executionLauncherPosition = executionLauncherPosition;
+      _executionLauncherPosition = syncedLauncherPosition;
       _isModeEnabled = refreshResult.overlaySnapshot.modeEnabled;
       _taskRunState = refreshResult.overlaySnapshot.modeEnabled
           ? refreshResult.overlaySnapshot.taskRunState
           : TaskRunState.idle;
+      _isExecutionPreviewEnabled = executionSnapshot.isShowing;
+      _isExecutionPanelCollapsed =
+          executionSnapshot.isShowing && executionSnapshot.isPanelCollapsed;
       _isLoadingSettings = false;
     });
   }
@@ -133,6 +143,8 @@ class _MultiPointPageState extends State<MultiPointPage>
   Future<void> _refreshNativeState() async {
     final refreshResult = await _permissionService
         .refreshMultiPointStateWithAccessibilityRetry();
+    final executionSnapshot = await _permissionService
+        .getMultiProfileExecutionOverlaySnapshot();
     if (!mounted) {
       return;
     }
@@ -142,9 +154,16 @@ class _MultiPointPageState extends State<MultiPointPage>
       fallback: _configuration,
     );
     await _settingsStore.saveConfiguration(snapshotConfiguration);
-    final snapshotProfileState = _profileStateWithConfiguration(
-      _profileState,
-      snapshotConfiguration,
+    final snapshotProfileState = _syncProfileStateWithExecutionSnapshot(
+      _profileStateWithConfiguration(_profileState, snapshotConfiguration),
+      executionSnapshot,
+    );
+    final syncedLauncherPosition =
+        executionSnapshot.launcherPosition ?? _executionLauncherPosition;
+    await _persistExecutionSnapshotPositions(
+      snapshotProfileState,
+      syncedLauncherPosition,
+      executionSnapshot,
     );
     if (!mounted) {
       return;
@@ -157,6 +176,10 @@ class _MultiPointPageState extends State<MultiPointPage>
       _taskRunState = refreshResult.overlaySnapshot.modeEnabled
           ? refreshResult.overlaySnapshot.taskRunState
           : TaskRunState.idle;
+      _executionLauncherPosition = syncedLauncherPosition;
+      _isExecutionPreviewEnabled = executionSnapshot.isShowing;
+      _isExecutionPanelCollapsed =
+          executionSnapshot.isShowing && executionSnapshot.isPanelCollapsed;
     });
   }
 
@@ -763,6 +786,49 @@ class _MultiPointPageState extends State<MultiPointPage>
       activeProfileId: state.activeProfileId,
       loadedProfiles: state.loadedProfiles,
     );
+  }
+
+  MultiPointProfileState _syncProfileStateWithExecutionSnapshot(
+    MultiPointProfileState state,
+    MultiProfileExecutionOverlaySnapshot snapshot,
+  ) {
+    if (!snapshot.isShowing || snapshot.buttonPositions.isEmpty) {
+      return state;
+    }
+
+    return state.copyWith(
+      loadedProfiles: [
+        for (final loadedProfile in state.loadedProfiles)
+          if (snapshot.buttonPositions.containsKey(loadedProfile.profileId))
+            loadedProfile.copyWith(
+              buttonPositionX:
+                  snapshot.buttonPositions[loadedProfile.profileId]!.x,
+              buttonPositionY:
+                  snapshot.buttonPositions[loadedProfile.profileId]!.y,
+            )
+          else
+            loadedProfile,
+      ],
+    );
+  }
+
+  Future<void> _persistExecutionSnapshotPositions(
+    MultiPointProfileState profileState,
+    MultiProfileExecutionLauncherPosition? launcherPosition,
+    MultiProfileExecutionOverlaySnapshot snapshot,
+  ) async {
+    if (!snapshot.isShowing) {
+      return;
+    }
+
+    // 页面被 pop 后 Flutter 不再监听拖动回调；重新进入页面时用原生快照补写一次，
+    // 避免用户在页面外移动过执行控件后，下一次刷新又被旧坐标覆盖。
+    if (snapshot.buttonPositions.isNotEmpty) {
+      await _settingsStore.saveProfileState(profileState);
+    }
+    if (launcherPosition != null) {
+      await _settingsStore.saveExecutionLauncherPosition(launcherPosition);
+    }
   }
 
   void _showPlatformError(PlatformException error, {required String fallback}) {

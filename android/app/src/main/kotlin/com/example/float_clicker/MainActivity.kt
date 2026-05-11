@@ -131,6 +131,9 @@ class MainActivity : FlutterActivity() {
                 "getMultiPointOverlaySnapshot" -> {
                     result.success(multiPointOverlayManager.snapshot.toMap())
                 }
+                "getMultiProfileExecutionOverlaySnapshot" -> {
+                    result.success(multiProfileExecutionOverlayManager.snapshot)
+                }
                 "openAccessibilitySettings" -> {
                     openAccessibilitySettings()
                     result.success(null)

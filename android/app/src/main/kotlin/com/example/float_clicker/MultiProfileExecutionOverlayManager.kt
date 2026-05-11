@@ -58,6 +58,26 @@ internal class MultiProfileExecutionOverlayManager(
     var isShowing: Boolean = false
         private set
 
+    val snapshot: Map<String, Any?>
+        get() {
+            val state = mutableMapOf<String, Any?>(
+                "isShowing" to isShowing,
+                "isPanelCollapsed" to isPanelCollapsed,
+                "buttonPositions" to buttonPositions.map { (profileId, point) ->
+                    mapOf(
+                        "profileId" to profileId,
+                        "x" to point.x,
+                        "y" to point.y,
+                    )
+                },
+            )
+            launcherPosition?.let { point ->
+                state["launcherPositionX"] = point.x
+                state["launcherPositionY"] = point.y
+            }
+            return state
+        }
+
     fun show(
         loadedProfiles: List<LoadedMultiPointProfileState>,
         appearanceSettings: OverlayAppearanceSettings,

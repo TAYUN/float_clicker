@@ -22,6 +22,9 @@ void main() {
   var nativeMultiPointExecutedInRound = 0;
   String? nativeMultiPointCurrentTargetId;
   var nativeExecutedCount = 0;
+  var nativeMultiProfileExecutionPanelCollapsed = false;
+  var nativeMultiProfileLauncherPosition = <String, Object?>{};
+  var nativeMultiProfileButtonPositions = <String, Map<String, Object?>>{};
   var nativeOverlaySettings = <String, Object?>{};
   var nativeMultiPointSettings = <String, Object?>{};
   var nativeAccessibilityGranted = false;
@@ -118,6 +121,11 @@ void main() {
     required int x,
     required int y,
   }) async {
+    nativeMultiProfileButtonPositions[profileId] = {
+      'profileId': profileId,
+      'x': x,
+      'y': y,
+    };
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage(
           permissionChannel.name,
@@ -135,6 +143,7 @@ void main() {
   Future<void> sendMultiProfileExecutionPanelState({
     required bool isPanelCollapsed,
   }) async {
+    nativeMultiProfileExecutionPanelCollapsed = isPanelCollapsed;
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage(
           permissionChannel.name,
@@ -151,6 +160,10 @@ void main() {
     required int x,
     required int y,
   }) async {
+    nativeMultiProfileLauncherPosition = {
+      'launcherPositionX': x,
+      'launcherPositionY': y,
+    };
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage(
           permissionChannel.name,
@@ -192,6 +205,9 @@ void main() {
     nativeMultiPointExecutedInRound = 0;
     nativeMultiPointCurrentTargetId = null;
     nativeExecutedCount = 0;
+    nativeMultiProfileExecutionPanelCollapsed = false;
+    nativeMultiProfileLauncherPosition = {};
+    nativeMultiProfileButtonPositions = {};
     nativeOverlaySettings = _defaultNativeOverlaySettings();
     nativeMultiPointSettings = _defaultNativeMultiPointSettings();
     nativeAccessibilityGranted = false;
@@ -231,6 +247,15 @@ void main() {
               ...nativeMultiPointSettings,
             };
           }
+          if (call.method == 'getMultiProfileExecutionOverlaySnapshot') {
+            return {
+              'isShowing': nativeMultiProfileExecutionEnabled,
+              'isPanelCollapsed': nativeMultiProfileExecutionPanelCollapsed,
+              'buttonPositions': nativeMultiProfileButtonPositions.values
+                  .toList(),
+              ...nativeMultiProfileLauncherPosition,
+            };
+          }
           if (call.method == 'showSinglePointOverlay') {
             nativeOverlayEnabled = true;
             nativeTaskRunState = 'idle';
@@ -246,13 +271,28 @@ void main() {
           }
           if (call.method == 'showMultiProfileExecutionOverlay') {
             nativeMultiProfileExecutionEnabled = true;
+            nativeMultiProfileExecutionPanelCollapsed =
+                (call.arguments
+                    as Map<Object?, Object?>?)?['isPanelCollapsed'] ==
+                true;
+            nativeMultiProfileLauncherPosition = _launcherPositionFromArguments(
+              call.arguments,
+            );
             return null;
           }
           if (call.method == 'updateMultiProfileExecutionOverlay') {
+            nativeMultiProfileExecutionPanelCollapsed =
+                (call.arguments
+                    as Map<Object?, Object?>?)?['isPanelCollapsed'] ==
+                true;
+            nativeMultiProfileLauncherPosition = _launcherPositionFromArguments(
+              call.arguments,
+            );
             return null;
           }
           if (call.method == 'hideMultiProfileExecutionOverlay') {
             nativeMultiProfileExecutionEnabled = false;
+            nativeMultiProfileExecutionPanelCollapsed = false;
             return null;
           }
           if (call.method == 'hideMultiPointOverlay') {
@@ -808,6 +848,66 @@ void main() {
     expect(arguments['isPanelCollapsed'], isFalse);
     expect(arguments['launcherPositionX'], 321);
     expect(arguments['launcherPositionY'], 432);
+  });
+
+  testWidgets('Multi point execution preview stays open after leaving page', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FloatClickerApp());
+
+    await tapVisibleText(tester, '多点模式');
+    await tapVisibleText(tester, '开启执行控件预览');
+    expect(nativeMultiProfileExecutionEnabled, isTrue);
+
+    methodCalls.clear();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(
+      methodCalls.where(
+        (call) => call.method == 'hideMultiProfileExecutionOverlay',
+      ),
+      isEmpty,
+    );
+    expect(nativeMultiProfileExecutionEnabled, isTrue);
+
+    await tapVisibleText(tester, '多点模式');
+    await scrollDown(tester);
+
+    expect(find.text('关闭执行控件预览'), findsOneWidget);
+    expect(find.textContaining('预览中'), findsOneWidget);
+  });
+
+  testWidgets('Multi point execution snapshot restores page state', (
+    tester,
+  ) async {
+    nativeMultiProfileExecutionEnabled = true;
+    nativeMultiProfileExecutionPanelCollapsed = true;
+    nativeMultiProfileLauncherPosition = {
+      'launcherPositionX': 246,
+      'launcherPositionY': 369,
+    };
+    nativeMultiProfileButtonPositions = {
+      'default': {'profileId': 'default', 'x': 135, 'y': 246},
+    };
+
+    await tester.pumpWidget(const FloatClickerApp());
+    await tapVisibleText(tester, '多点模式');
+    await scrollDown(tester);
+
+    expect(find.text('关闭执行控件预览'), findsOneWidget);
+    expect(find.textContaining('已收起'), findsOneWidget);
+
+    methodCalls.clear();
+    await tapVisibleText(tester, '关闭执行控件预览');
+
+    expect(
+      methodCalls.where(
+        (call) => call.method == 'hideMultiProfileExecutionOverlay',
+      ),
+      isNotEmpty,
+    );
+    expect(nativeMultiProfileExecutionEnabled, isFalse);
   });
 
   testWidgets('Multi point target edits persist after leaving page', (
@@ -1585,4 +1685,15 @@ Map<String, Object?> _defaultNativeMultiPointSettings() {
 
 Map<String, Object?> _objectMap(Object? value) {
   return Map<String, Object?>.from(value as Map<Object?, Object?>);
+}
+
+Map<String, Object?> _launcherPositionFromArguments(Object? value) {
+  final map = value as Map<Object?, Object?>?;
+  if (map == null || map['launcherPositionX'] == null) {
+    return {};
+  }
+  return {
+    'launcherPositionX': map['launcherPositionX'],
+    'launcherPositionY': map['launcherPositionY'],
+  };
 }
