@@ -356,8 +356,8 @@ internal class MultiProfileExecutionOverlayManager(
         val currentPosition = buttonPositions[profile.profileId] ?: profile.buttonPosition ?: fallback
         return overlay.coercePositionPx(
             currentPosition,
-            widthPx = executionButtonWidthPx(),
-            heightPx = executionButtonHeightPx(),
+            widthPx = executionButtonSizePx(),
+            heightPx = executionButtonSizePx(),
         )
     }
 
@@ -395,12 +395,8 @@ internal class MultiProfileExecutionOverlayManager(
         onLauncherPositionChanged(nextPosition)
     }
 
-    private fun executionButtonWidthPx(): Int {
-        return (metrics.actionButtonSizePx * 3.2f).toInt().coerceAtLeast(overlay.dp(112))
-    }
-
-    private fun executionButtonHeightPx(): Int {
-        return metrics.actionButtonSizePx.coerceAtLeast(overlay.dp(42))
+    private fun executionButtonSizePx(): Int {
+        return metrics.actionButtonSizePx.coerceAtLeast(overlay.dp(46))
     }
 
     private fun launcherSizePx(): Int {

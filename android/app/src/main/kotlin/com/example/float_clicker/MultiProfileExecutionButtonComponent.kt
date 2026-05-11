@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.text.TextUtils
 import android.view.Gravity
 import android.view.WindowManager
 import android.widget.TextView
@@ -36,8 +35,8 @@ internal class MultiProfileExecutionButtonComponent(
         if (view == null) {
             val button = createView()
             val nextParams = overlayWindow.overlayParams(
-                width = executionButtonWidthPx(),
-                height = executionButtonHeightPx(),
+                width = executionButtonSizePx(),
+                height = executionButtonSizePx(),
                 position = position,
             )
             overlayWindow.bindDrag(
@@ -69,8 +68,8 @@ internal class MultiProfileExecutionButtonComponent(
         this.metrics = metrics
         val button = view ?: return
         val buttonParams = params ?: return
-        buttonParams.width = executionButtonWidthPx()
-        buttonParams.height = executionButtonHeightPx()
+        buttonParams.width = executionButtonSizePx()
+        buttonParams.height = executionButtonSizePx()
         button.textSize = executionButtonTextSizeSp()
         button.background = buttonBackground()
         overlayWindow.updateViewLayout(button, buttonParams)
@@ -82,7 +81,8 @@ internal class MultiProfileExecutionButtonComponent(
         isBlocked: Boolean,
     ) {
         view?.apply {
-            text = if (isRunning) "停止 ${profile.displayName}" else profile.displayName
+            // 多个执行控件会长期停留在屏幕侧边；这里只保留短标签，优先换取更小遮挡面积。
+            text = buttonLabel(profile, isRunning)
             alpha = if (isBlocked) 0.62f else 1f
             background = buttonBackground(isRunning)
             contentDescription = if (isRunning) {
@@ -101,13 +101,7 @@ internal class MultiProfileExecutionButtonComponent(
             gravity = Gravity.CENTER
             includeFontPadding = false
             maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            setPadding(
-                overlayWindow.dp(12),
-                0,
-                overlayWindow.dp(12),
-                0,
-            )
+            setPadding(0, 0, 0, 0)
             background = buttonBackground(isRunning = false)
             elevation = overlayWindow.dp(8).toFloat()
             isClickable = true
@@ -116,8 +110,7 @@ internal class MultiProfileExecutionButtonComponent(
 
     private fun buttonBackground(isRunning: Boolean = false): GradientDrawable {
         return GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = overlayWindow.dp(16).toFloat()
+            shape = GradientDrawable.OVAL
             setColor(if (isRunning) OverlayColors.DANGER_SOFT else OverlayColors.PANEL)
             setStroke(
                 metrics.actionButtonStrokePx,
@@ -126,15 +119,47 @@ internal class MultiProfileExecutionButtonComponent(
         }
     }
 
-    private fun executionButtonWidthPx(): Int {
-        return (metrics.actionButtonSizePx * 3.2f).toInt().coerceAtLeast(overlayWindow.dp(112))
+    private fun buttonLabel(profile: LoadedMultiPointProfileState, isRunning: Boolean): String {
+        return if (isRunning) {
+            "停止"
+        } else {
+            compactLabel(profile.displayName)
+        }
     }
 
-    private fun executionButtonHeightPx(): Int {
-        return metrics.actionButtonSizePx.coerceAtLeast(overlayWindow.dp(42))
+    private fun compactLabel(displayName: String): String {
+        val trimmed = displayName.trim()
+        if (trimmed.isEmpty()) {
+            return "配置"
+        }
+
+        val tokenizedInitials = trimmed
+            .split(Regex("[\\s_-]+"))
+            .mapNotNull { token -> token.firstOrNull()?.takeIf { !it.isWhitespace() } }
+            .take(2)
+            .joinToString("")
+        if (tokenizedInitials.length >= 2) {
+            return tokenizedInitials.uppercase()
+        }
+
+        val condensed = trimmed.filterNot(Char::isWhitespace)
+        if (condensed.length <= 2) {
+            return condensed.uppercase()
+        }
+
+        val asciiOnly = condensed.all { it.code <= 0x7F }
+        return if (asciiOnly) {
+            condensed.take(2).uppercase()
+        } else {
+            condensed.take(2)
+        }
+    }
+
+    private fun executionButtonSizePx(): Int {
+        return metrics.actionButtonSizePx.coerceAtLeast(overlayWindow.dp(46))
     }
 
     private fun executionButtonTextSizeSp(): Float {
-        return 13f
+        return 10.5f
     }
 }
