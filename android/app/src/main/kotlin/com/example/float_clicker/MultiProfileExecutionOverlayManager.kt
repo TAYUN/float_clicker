@@ -200,7 +200,7 @@ internal class MultiProfileExecutionOverlayManager(
             return refreshButtons()
         }
 
-        // 收起态只保留一个恢复入口；P7.3.2 起恢复入口位置由 Flutter 持久化。
+        // 收起态只保留一个恢复入口；P7.3.3 起恢复入口会吸附到左右可见边缘。
         removeButtonComponents()
         val position = coercedLauncherPosition()
         return launcherComponent.show(position = position, metrics = metrics)
@@ -350,14 +350,14 @@ internal class MultiProfileExecutionOverlayManager(
 
     private fun coercedLauncherPosition(): OverlayPoint {
         val previousPosition = launcherPosition
-        val nextPosition = overlay.coercePositionPx(
+        val nextPosition = overlay.snapPositionToHorizontalEdge(
             previousPosition ?: OverlayPoint(DEFAULT_START_X, DEFAULT_START_Y),
             widthPx = launcherSizePx(),
             heightPx = launcherSizePx(),
         )
         if (nextPosition != previousPosition) {
             launcherPosition = nextPosition
-            // 只有已有持久化坐标被边界校正时才回传，避免首次默认位置也写入偏好。
+            // 只有已有持久化坐标被吸附或边界校正时才回传，避免首次默认位置也写入偏好。
             if (previousPosition != null) {
                 onLauncherPositionChanged(nextPosition)
             }
@@ -366,7 +366,7 @@ internal class MultiProfileExecutionOverlayManager(
     }
 
     private fun handleLauncherPositionChanged(position: OverlayPoint) {
-        val nextPosition = overlay.coercePositionPx(
+        val nextPosition = overlay.snapPositionToHorizontalEdge(
             position,
             widthPx = launcherSizePx(),
             heightPx = launcherSizePx(),

@@ -123,6 +123,19 @@ internal class OverlayWindowHelper(
         )
     }
 
+    fun snapPositionToHorizontalEdge(position: OverlayPoint, widthPx: Int, heightPx: Int): OverlayPoint {
+        val bounds = overlayBoundsPx(view = null)
+        val coerced = coercePositionPx(position, widthPx, heightPx)
+        val left = logicalPosition(bounds.left)
+        val right = logicalPosition((bounds.right - widthPx).coerceAtLeast(bounds.left))
+        val horizontalCenterPx = bounds.left + (bounds.right - bounds.left) / 2
+        // 用传入位置的中心点判断吸附方向；横竖屏后旧坐标即使被裁剪，也尽量保留用户原本靠左/靠右的意图。
+        val positionCenterPx = dp(position.x) + widthPx / 2
+        val snappedX = if (positionCenterPx <= horizontalCenterPx) left else right
+
+        return coerced.copy(x = snappedX)
+    }
+
     fun bindDrag(
         view: View,
         params: WindowManager.LayoutParams,
