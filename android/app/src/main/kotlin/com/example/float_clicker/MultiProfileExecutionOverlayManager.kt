@@ -45,6 +45,12 @@ internal class MultiProfileExecutionOverlayManager(
         onClick = ::expandPanelFromLauncher,
         onPositionChanged = ::handleLauncherPositionChanged,
     )
+    private val sidebarComponent = MultiProfileExecutionSidebarComponent(
+        context = context,
+        overlayWindow = overlay,
+        onCollapse = ::collapsePanelToLauncher,
+        onStopCurrentTask = ::stopFromSidebar,
+    )
     private var taskStatus = MultiPointTaskStatus()
     private var runningProfileId: String? = null
     private var profiles = emptyList<LoadedMultiPointProfileState>()
@@ -136,6 +142,7 @@ internal class MultiProfileExecutionOverlayManager(
         isPanelCollapsed = false
         mainHandler.removeCallbacks(displayBoundsRefreshRunnable)
         removeButtonComponents()
+        sidebarComponent.remove()
         launcherComponent.remove()
         removeDisplayListener()
     }
@@ -217,13 +224,21 @@ internal class MultiProfileExecutionOverlayManager(
     private fun refreshOverlay(): Boolean {
         pruneRemovedProfiles()
         if (!isPanelCollapsed) {
-            return refreshButtons()
+            if (!refreshButtons()) {
+                return false
+            }
+            return refreshSidebar()
         }
 
         // 收起态只保留一个恢复入口；P7.3.3 起恢复入口会吸附到左右可见边缘。
         removeButtonComponents()
+        sidebarComponent.remove()
         val position = coercedLauncherPosition()
-        return launcherComponent.show(position = position, metrics = metrics)
+        return launcherComponent.show(
+            position = position,
+            metrics = metrics,
+            isRunning = hasActiveTask(),
+        )
     }
 
     private fun expandPanelFromLauncher() {
@@ -232,6 +247,18 @@ internal class MultiProfileExecutionOverlayManager(
         if (isShowing && !refreshOverlay()) {
             hide()
         }
+    }
+
+    private fun collapsePanelToLauncher() {
+        isPanelCollapsed = true
+        onPanelStateChanged(true)
+        if (isShowing && !refreshOverlay()) {
+            hide()
+        }
+    }
+
+    private fun stopFromSidebar() {
+        endActiveTask("配置任务已结束")
     }
 
     private fun pruneRemovedProfiles() {
@@ -250,6 +277,32 @@ internal class MultiProfileExecutionOverlayManager(
     private fun removeButtonComponents() {
         buttonComponents.values.forEach { component -> component.remove() }
         buttonComponents.clear()
+    }
+
+    private fun refreshSidebar(): Boolean {
+        val state = currentSidebarState()
+        val anchorPosition = coercedLauncherPosition()
+        val position = overlay.adjacentPanelPosition(
+            anchorPosition = anchorPosition,
+            anchorWidthPx = launcherWidthPx(),
+            anchorHeightPx = launcherHeightPx(),
+            panelWidthPx = sidebarComponent.preferredWidthPx(),
+            panelHeightPx = sidebarComponent.preferredHeightPx(state),
+        )
+        return sidebarComponent.show(
+            state = state,
+            position = position,
+            metrics = metrics,
+        )
+    }
+
+    private fun currentSidebarState(): MultiProfileExecutionSidebarState {
+        val runningProfile = profiles.firstOrNull { it.profileId == runningProfileId }
+        return MultiProfileExecutionSidebarState(
+            loadedProfileCount = profiles.size,
+            isRunning = hasActiveTask(),
+            currentProfileName = runningProfile?.displayName,
+        )
     }
 
     private fun handleButtonClick(profileId: String) {
@@ -372,8 +425,8 @@ internal class MultiProfileExecutionOverlayManager(
         val previousPosition = launcherPosition
         val nextPosition = overlay.snapPositionToHorizontalEdge(
             previousPosition ?: OverlayPoint(DEFAULT_START_X, DEFAULT_START_Y),
-            widthPx = launcherSizePx(),
-            heightPx = launcherSizePx(),
+            widthPx = launcherWidthPx(),
+            heightPx = launcherHeightPx(),
         )
         if (nextPosition != previousPosition) {
             launcherPosition = nextPosition
@@ -388,8 +441,8 @@ internal class MultiProfileExecutionOverlayManager(
     private fun handleLauncherPositionChanged(position: OverlayPoint) {
         val nextPosition = overlay.snapPositionToHorizontalEdge(
             position,
-            widthPx = launcherSizePx(),
-            heightPx = launcherSizePx(),
+            widthPx = launcherWidthPx(),
+            heightPx = launcherHeightPx(),
         )
         launcherPosition = nextPosition
         onLauncherPositionChanged(nextPosition)
@@ -399,8 +452,16 @@ internal class MultiProfileExecutionOverlayManager(
         return metrics.actionButtonSizePx.coerceAtLeast(overlay.dp(46))
     }
 
-    private fun launcherSizePx(): Int {
-        return metrics.actionButtonSizePx.coerceAtLeast(overlay.dp(44))
+    private fun launcherWidthPx(): Int {
+        return overlay.dp(68)
+    }
+
+    private fun launcherHeightPx(): Int {
+        return overlay.dp(50)
+    }
+
+    private fun hasActiveTask(): Boolean {
+        return runningProfileId != null || taskStatus.taskRunState != TaskRunState.IDLE
     }
 
     private fun handleDisplayBoundsChanged() {

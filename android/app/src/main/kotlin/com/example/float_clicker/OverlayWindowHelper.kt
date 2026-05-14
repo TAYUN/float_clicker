@@ -136,6 +136,33 @@ internal class OverlayWindowHelper(
         return coerced.copy(x = snappedX)
     }
 
+    fun adjacentPanelPosition(
+        anchorPosition: OverlayPoint,
+        anchorWidthPx: Int,
+        anchorHeightPx: Int,
+        panelWidthPx: Int,
+        panelHeightPx: Int,
+        gapPx: Int = dp(10),
+    ): OverlayPoint {
+        val bounds = overlayBoundsPx(view = null)
+        val anchorLeftPx = dpPosition(anchorPosition.x)
+        val anchorRightPx = anchorLeftPx + anchorWidthPx
+        val anchorCenterPx = anchorLeftPx + anchorWidthPx / 2
+        val screenCenterPx = bounds.left + (bounds.right - bounds.left) / 2
+        val targetX = if (anchorCenterPx <= screenCenterPx) {
+            anchorRightPx + gapPx
+        } else {
+            anchorLeftPx - gapPx - panelWidthPx
+        }
+
+        // 侧边栏位置不单独持久化，始终锚定在 launcher 旁边，避免首轮又引入一套新的面板坐标语义。
+        return coercePositionPx(
+            position = OverlayPoint(x = logicalPosition(targetX), y = anchorPosition.y),
+            widthPx = panelWidthPx,
+            heightPx = panelHeightPx,
+        )
+    }
+
     fun bindDrag(
         view: View,
         params: WindowManager.LayoutParams,
